@@ -31,6 +31,7 @@ struct Params
     bool delayVib = false; float delayVibInt = 0.3f;     // delay time is fixed on the hardware
     float bendRange = 2.0f;
     int transpose = 0;                                  // Tridex II: -12..+12 semitones (split stays on the physical keys)
+    std::array<int, 3> octShift {};                     // Tridex II: per-part octave shift -2..+2 (Synth, Brass, Strings)
     bool flSynth = false, flBrass = false, flStrings = false;
     float flManual = 0.4f, flIntensity = 0.5f, flFeedback = 0.4f, flSpeed = 0.3f;
     float drift = 0.3f, velSens = 0.0f;
@@ -155,7 +156,7 @@ public:
         flanger.prepare (sr);
         for (auto* d : { &dcL, &dcR }) *d = {};
         brassHeld = stringsHeld = 0; nextVoice = 0;
-        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0);
+        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         for (auto& a : arps) a.clear ([] (int) {});
     }
 
@@ -220,7 +221,7 @@ public:
         for (int s = 0; s < 3; ++s) arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
         monoCurrent = -1; monoCount = 0;
         for (auto& v : voices) if (v.keyDown) releaseSections (v, kAll, false);
-        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0);
+        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         heldCount = 0;
     }
 
@@ -438,21 +439,45 @@ private:
         return stamp (*best);
     }
 
+    static std::array<std::array<int16_t, 128>, 3> makeSounding()
+    {
+        std::array<std::array<int16_t, 128>, 3> a {};
+        for (auto& r : a) r.fill (-1);
+        return a;
+    }
+
     int brassThreshold() const { return p.trigSelect ? 2 * (std::clamp (p.silenceNote, 0, 3) + 1) : 1; }
 
     Voice& stamp (Voice& v) { v.age = ++ageCounter; return v; }
 
     // Section note entry points: brass is diverted through the mono handler when MONO is on.
+    // Each section plays the note shifted by its OCTAVE setting. The sounding note is
+    // remembered per section so a release always matches, even if the octave changed.
     void voiceOn (int note, float vel, int mask)
     {
-        if ((mask & kBr) && p.brMono) { brassMonoOn (note, vel); mask &= ~kBr; }
-        if (mask) voiceOnRaw (note, vel, mask);
+        for (int s = 0; s < 3; ++s)
+        {
+            const int bit = 1 << s;
+            if (! (mask & bit)) continue;
+            const int sn = std::clamp (note + 12 * std::clamp (p.octShift[(size_t) s], -2, 2), 0, 127);
+            sounding[(size_t) s][(size_t) note] = (int16_t) sn;
+            if (bit == kBr && p.brMono) brassMonoOn (sn, vel);
+            else voiceOnRaw (sn, vel, bit);
+        }
     }
 
     void voiceOff (int note, int mask)
     {
-        if ((mask & kBr) && p.brMono) { brassMonoOff (note); mask &= ~kBr; }
-        if (mask) voiceOffRaw (note, mask);
+        for (int s = 0; s < 3; ++s)
+        {
+            const int bit = 1 << s;
+            if (! (mask & bit)) continue;
+            int sn = sounding[(size_t) s][(size_t) note];
+            if (sn < 0) sn = note;
+            sounding[(size_t) s][(size_t) note] = -1;
+            if (bit == kBr && p.brMono) brassMonoOff (sn);
+            else voiceOffRaw (sn, bit);
+        }
     }
 
     // ---- Monophonic brass: one note at a time, last-note priority.
@@ -645,6 +670,7 @@ private:
 
     std::array<bool, 128> held {}, sustained {};
     std::array<uint8_t, 128> keyMask {}, arpMask {};   // per held key: sections played directly / via arp
+    std::array<std::array<int16_t, 128>, 3> sounding = makeSounding();   // per section: input note -> sounding note
     std::array<Arp, 3> arps;
     double hostBpm = 120.0, hostPpq = 0.0;
     bool hostPlaying = false;

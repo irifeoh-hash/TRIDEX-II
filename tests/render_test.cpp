@@ -50,6 +50,8 @@ int main (int argc, char** argv)
     arp.arp[2].on = true; arp.arp[2].rate = 1; arp.arp[2].mode = 3; fails += render ("arps", arp, out);
     tdx::Params mono; mono.synOn = false; mono.brOn = true; mono.brMono = true; mono.multiTrig = false;
     fails += render ("brass_mono", mono, out);
+    tdx::Params oct; oct.brOn = oct.stOn = true; oct.octShift = { 1, -1, 2 }; oct.brMono = true; oct.arp[2].on = true;
+    fails += render ("oct_shift", oct, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

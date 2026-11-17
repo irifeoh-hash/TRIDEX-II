@@ -2,10 +2,12 @@
 
 namespace
 {
-const juce::Colour kPanel  { 0xff141416 };
-const juce::Colour kPanel2 { 0xff1c1c1f };
-const juce::Colour kWood   { 0xff5a3620 };
-const juce::Colour kInk    { 0xffeae6dc };
+// Trident Mk II-inspired palette: black panel, white legends, grey ("No. 2 Gray") knob
+// caps with white caps on the programmable synth knobs, cream switches, walnut cheeks.
+const juce::Colour kPanel  { 0xff111113 };
+const juce::Colour kPanel2 { 0xff19191c };
+const juce::Colour kWood   { 0xff4e2c18 };
+const juce::Colour kInk    { 0xffeeebe4 };
 const juce::Colour kLedOn  { 0xffff3a2a };
 const juce::Colour kLedOff { 0xff4a1612 };
 
@@ -43,41 +45,57 @@ void PanelLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w,
     const auto labels = juce::StringArray::fromTokens (s.getProperties()["labels"].toString(), "|", "");
     const juce::String scale = s.getProperties()["scale"].toString();
 
-    // Scale legends around the knob, as printed on the panel.
-    g.setColour (kInk.withAlpha (0.8f));
-    g.setFont (juce::FontOptions (7.5f));
+    // Scale: fine ticks with sparse numerals, as printed on the panel.
+    const auto at = [&] (float t) { return startAngle + t * (endAngle - startAngle); };
     const auto legend = [&] (float t, const juce::String& txt)
     {
-        const float a = startAngle + t * (endAngle - startAngle);
-        const auto p = c.getPointOnCircumference (r + 6.5f, a);
-        g.drawText (txt, juce::Rectangle<float> (22, 9).withCentre (p), juce::Justification::centred);
+        const auto p = c.getPointOnCircumference (r + 7.0f, at (t));
+        g.drawText (txt, juce::Rectangle<float> (24, 9).withCentre (p), juce::Justification::centred);
     };
-    if (labels.size() > 1)
-        for (int i = 0; i < labels.size(); ++i) legend ((float) i / (float) (labels.size() - 1), labels[i]);
-    else if (scale == "bip")
+    const auto tick = [&] (float t, float len, float alpha)
     {
-        legend (0.0f, "-5"); legend (0.5f, "0"); legend (1.0f, "+5");
-        for (int i = 1; i < 10; ++i) if (i != 5) legend ((float) i / 10.0f, ".");
+        g.setColour (kInk.withAlpha (alpha));
+        g.drawLine (juce::Line<float> (c.getPointOnCircumference (r + 1.5f, at (t)), c.getPointOnCircumference (r + 1.5f + len, at (t))), 1.0f);
+    };
+    g.setFont (juce::FontOptions (7.0f).withKerningFactor (0.04f));
+    if (labels.size() > 1)
+    {
+        g.setColour (kInk.withAlpha (0.75f));
+        for (int i = 0; i < labels.size(); ++i) legend ((float) i / (float) (labels.size() - 1), labels[i]);
     }
-    else if (scale == "uni")
-        for (int i = 0; i <= 10; ++i) legend ((float) i / 10.0f, (i % 5 == 0) ? juce::String (i) : juce::String ("."));
+    else if (scale == "bip" || scale == "uni")
+    {
+        for (int i = 0; i <= 10; ++i) tick ((float) i / 10.0f, i % 5 == 0 ? 3.5f : 2.0f, i % 5 == 0 ? 0.8f : 0.45f);
+        g.setColour (kInk.withAlpha (0.7f));
+        if (scale == "bip") { legend (0.0f, "-"); legend (0.5f, "0"); legend (1.0f, "+"); }
+        else                { legend (0.0f, "0"); legend (1.0f, "10"); }
+    }
 
-    // Skirt + cap
-    g.setColour (juce::Colour (0xff050505));
+    // Shadow, black fluted skirt, cap
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillEllipse (c.x - r, c.y - r + 2.0f, r * 2, r * 2);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2a2a2c), c.x, c.y - r, juce::Colour (0xff030303), c.x, c.y + r, false));
     g.fillEllipse (c.x - r, c.y - r, r * 2, r * 2);
-    const float kr = r * 0.82f;
-    const auto top = white ? juce::Colour (0xfff2f0ea) : juce::Colour (0xff3c3c40);
-    const auto bot = white ? juce::Colour (0xffb8b4aa) : juce::Colour (0xff101012);
+
+    const float angle = at (pos);
+    // White index line on the skirt (outside the cap)
+    g.setColour (kInk);
+    g.drawLine (juce::Line<float> (c.getPointOnCircumference (r * 0.78f, angle), c.getPointOnCircumference (r - 0.5f, angle)), 2.0f);
+
+    const float kr = r * 0.74f;
+    const auto top = white ? juce::Colour (0xfff6f4ee) : juce::Colour (0xffb2b2ae);
+    const auto bot = white ? juce::Colour (0xffc6c2b8) : juce::Colour (0xff5c5c5a);
     g.setGradientFill (juce::ColourGradient (top, c.x, c.y - kr, bot, c.x, c.y + kr, false));
     g.fillEllipse (c.x - kr, c.y - kr, kr * 2, kr * 2);
-    g.setColour (juce::Colours::black.withAlpha (0.5f));
-    g.drawEllipse (c.x - kr, c.y - kr, kr * 2, kr * 2, 1.0f);
+    // soft top highlight
+    g.setColour (juce::Colours::white.withAlpha (white ? 0.35f : 0.18f));
+    g.fillEllipse (c.x - kr * 0.6f, c.y - kr * 0.85f, kr * 1.2f, kr * 0.7f);
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.drawEllipse (c.x - kr, c.y - kr, kr * 2, kr * 2, 0.8f);
 
-    const float angle = startAngle + pos * (endAngle - startAngle);
-    juce::Path ptr;
-    ptr.addRoundedRectangle (-1.4f, -kr + 1.5f, 2.8f, kr * 0.6f, 1.0f);
-    g.setColour (white ? juce::Colour (0xff141414) : kInk);
-    g.fillPath (ptr, juce::AffineTransform::rotation (angle).translated (c.x, c.y));
+    // Pointer groove on the cap
+    g.setColour (juce::Colour (0xff141414).withAlpha (0.9f));
+    g.drawLine (juce::Line<float> (c.getPointOnCircumference (kr * 0.25f, angle), c.getPointOnCircumference (kr - 1.5f, angle)), 1.6f);
 }
 
 //==============================================================================
@@ -85,23 +103,25 @@ void LedButton::paintButton (juce::Graphics& g, bool over, bool down)
 {
     const auto b = getLocalBounds().toFloat();
     const bool on = getClickingTogglesState() ? getToggleState() : lit;
-    const auto cap = b.reduced (3.0f, 1.0f);
+    const auto cap = b.reduced (5.0f, 1.5f);
 
-    const auto base = redCap ? juce::Colour (0xffc83a2c) : juce::Colour (0xffe9e4d6);
-    g.setColour (juce::Colours::black);
-    g.fillRoundedRectangle (cap.expanded (1.5f), 3.0f);
-    g.setGradientFill (juce::ColourGradient (base.brighter (over ? 0.15f : 0.05f), cap.getX(), cap.getY(),
-                                             base.darker (down ? 0.5f : 0.25f), cap.getX(), cap.getBottom(), false));
-    g.fillRoundedRectangle (cap, 2.5f);
+    const auto base = redCap ? juce::Colour (0xffc4402f) : juce::Colour (0xffece8dd);
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.fillRoundedRectangle (cap.translated (0.0f, 1.5f).expanded (1.0f), 2.5f);
+    g.setGradientFill (juce::ColourGradient (base.brighter (over ? 0.12f : 0.0f), cap.getX(), cap.getY(),
+                                             base.darker (down ? 0.45f : 0.18f), cap.getX(), cap.getBottom(), false));
+    g.fillRoundedRectangle (cap, 2.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.35f));
+    g.drawHorizontalLine ((int) cap.getY() + 1, cap.getX() + 2.0f, cap.getRight() - 2.0f);
 
-    const auto ledC = juce::Point<float> (cap.getCentreX(), cap.getY() + 7.0f);
+    const auto ledC = juce::Point<float> (cap.getCentreX(), cap.getY() + 6.5f);
     if (on)
     {
-        g.setColour (kLedOn.withAlpha (0.35f));
-        g.fillEllipse (juce::Rectangle<float> (12, 12).withCentre (ledC));
+        g.setGradientFill (juce::ColourGradient (kLedOn.withAlpha (0.55f), ledC.x, ledC.y, kLedOn.withAlpha (0.0f), ledC.x + 8.0f, ledC.y, true));
+        g.fillEllipse (juce::Rectangle<float> (16, 16).withCentre (ledC));
     }
     g.setColour (on ? kLedOn : kLedOff);
-    g.fillEllipse (juce::Rectangle<float> (6, 6).withCentre (ledC));
+    g.fillEllipse (juce::Rectangle<float> (5, 5).withCentre (ledC));
 }
 
 void SlideSwitch::paintButton (juce::Graphics& g, bool, bool)
@@ -205,6 +225,54 @@ void TransposeControl::mouseDoubleClick (const juce::MouseEvent& e)
 }
 
 //==============================================================================
+OctaveControl::OctaveControl (juce::RangedAudioParameter& p)
+    : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); })
+{
+    attachment.sendInitialUpdate();
+}
+
+void OctaveControl::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    const auto disp = b.withWidth (b.getWidth() * 0.5f).reduced (1.0f, 2.0f);
+    g.setColour (juce::Colour (0xff1d0705));
+    g.fillRoundedRectangle (disp, 3.0f);
+    g.setColour (value == 0 ? kLedOn.withAlpha (0.5f) : kLedOn);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::bold));
+    g.drawText (value > 0 ? "+" + juce::String (value) : juce::String (value), disp, juce::Justification::centred);
+
+    const auto btnCol = b.withTrimmedLeft (b.getWidth() * 0.5f + 2.0f);
+    const auto drawBtn = [&] (juce::Rectangle<float> r, bool up)
+    {
+        g.setColour (juce::Colours::black);
+        g.fillRoundedRectangle (r, 2.5f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe9e4d6), r.getX(), r.getY(),
+                                                 juce::Colour (0xffb9b4a6), r.getX(), r.getBottom(), false));
+        g.fillRoundedRectangle (r.reduced (1.5f), 2.0f);
+        juce::Path tri;
+        const auto c = r.getCentre();
+        if (up) tri.addTriangle (c.x - 4, c.y + 2.5f, c.x + 4, c.y + 2.5f, c.x, c.y - 3);
+        else    tri.addTriangle (c.x - 4, c.y - 2.5f, c.x + 4, c.y - 2.5f, c.x, c.y + 3);
+        g.setColour (juce::Colour (0xff1a1a1a));
+        g.fillPath (tri);
+    };
+    drawBtn (btnCol.withHeight (btnCol.getHeight() * 0.5f).reduced (0.0f, 1.0f), true);
+    drawBtn (btnCol.withTrimmedTop (btnCol.getHeight() * 0.5f).reduced (0.0f, 1.0f), false);
+}
+
+void OctaveControl::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.x < getWidth() / 2) return;
+    const int v = juce::jlimit (-2, 2, value + (e.y < getHeight() / 2 ? 1 : -1));
+    if (v != value) attachment.setValueAsCompleteGesture ((float) v);
+}
+
+void OctaveControl::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (e.x < getWidth() / 2) attachment.setValueAsCompleteGesture (0.0f);
+}
+
+//==============================================================================
 void Joystick::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (2.0f);
@@ -253,7 +321,7 @@ namespace tdxui
 {
 ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
 {
-    const int W = 1734 - 48, H = 296 - 40;    // TridexPanel::kW - cheeks, kLowerY - header
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;    // panel minus cheeks, below the header
     setSize (W, H);
     const char* ids[] = { "arp1", "arp2", "arp3" };
     const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
@@ -441,6 +509,16 @@ juce::ComboBox& TridexPanel::combo (const char* id, int x, int y, int w)
     return ref;
 }
 
+void TridexPanel::octave (const char* id, int cx, int y)
+{
+    auto o = std::make_unique<tdxui::OctaveControl> (*proc.apvts.getParameter (id));
+    o->setBounds (cx - 22, y, 44, 36);
+    o->setTooltip (proc.apvts.getParameter (id)->getName (64) + " (double-click the display to reset)");
+    addAndMakeVisible (*o);
+    owned.push_back (std::move (o));
+    text ({ (float) cx - 24, (float) y + 38, 48, 10 }, "OCTAVE", 7.0f);
+}
+
 void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j)
 {
     texts.push_back ({ r, s, size, bold, j });
@@ -546,6 +624,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             progBtns[(size_t) i] = &progButton (juce::String (i + 1), bx += 30, kSwY, [this, i] { programPressed (i); });
         text ({ (float) s0 + 80, (float) kSwY + 50, 360, 10 }, "PROGRAMMER", 8.0f, true);
 
+        octave ("syn_octsh", s0 + 11 * kCol - 118, kSwY);
         knob ("syn_vol", s0 + 11 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
         led ("syn_on", s0 + 11 * kCol - 20, kSwY, "OUTPUT");
         auto [a, b] = sectionEnd (11);
@@ -581,6 +660,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("br_multi", bx += 46, kSwY, "MULTIPLE TRIGGER");
         led ("br_tsel", bx += 42, kSwY, "TRIGGER SELECT");
         led ("br_mono", bx += 42, kSwY, "MONO");
+        octave ("br_octsh", bx += 46, kSwY);
         auto [a, b] = sectionEnd (6);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
     }
@@ -607,13 +687,14 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         knob ("st_vol", s0 + 20, kSwY + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
         led ("st_on", bx, kSwY, "OUTPUT");
-        led ("st_16", bx += 36, kSwY, "16'");
-        led ("st_8", bx += 32, kSwY, "8'");
-        led ("st_4", bx += 32, kSwY, "4'");
-        led ("bow_on", bx += 38, kSwY, "BOWING");
-        led ("svib_off", bx += 36, kSwY, "VIBRATO OFF");
-        led ("ens_off", bx += 36, kSwY, "ENSEMBLE OFF");
-        auto [a, b] = sectionEnd (5);
+        led ("st_16", bx += 38, kSwY, "16'");
+        led ("st_8", bx += 34, kSwY, "8'");
+        led ("st_4", bx += 34, kSwY, "4'");
+        led ("bow_on", bx += 40, kSwY, "BOWING");
+        led ("svib_off", bx += 40, kSwY, "VIBRATO OFF");
+        led ("ens_off", bx += 40, kSwY, "ENSEMBLE OFF");
+        octave ("st_octsh", bx += 44, kSwY);
+        auto [a, b] = sectionEnd (6);
         sectionBar ((float) a, (float) b, kBarY, "STRINGS");
     }
 
@@ -755,13 +836,36 @@ void TridexPanel::timerCallback()
 void TridexPanel::paint (juce::Graphics& g)
 {
     // Wooden end cheeks + panel
+    // Walnut end cheeks with a little grain
     g.fillAll (kWood);
-    g.setGradientFill (juce::ColourGradient (kWood.brighter (0.15f), 0, 0, kWood.darker (0.3f), 24, 0, false));
+    g.setGradientFill (juce::ColourGradient (kWood.brighter (0.2f), 0, 0, kWood.darker (0.35f), 24, 0, false));
     g.fillRect (0, 0, 24, kH);
-    g.setGradientFill (juce::ColourGradient (kWood.darker (0.3f), (float) kW - 24, 0, kWood.brighter (0.15f), (float) kW, 0, false));
+    g.setGradientFill (juce::ColourGradient (kWood.darker (0.35f), (float) kW - 24, 0, kWood.brighter (0.2f), (float) kW, 0, false));
     g.fillRect (kW - 24, 0, 24, kH);
-    g.setColour (kPanel);
+    for (int k = 0; k < 9; ++k)
+        for (int side = 0; side < 2; ++side)
+        {
+            const float x0 = (side == 0 ? 2.0f : (float) kW - 22.0f) + (float) k * 2.3f;
+            juce::Path grain;
+            grain.startNewSubPath (x0, 0.0f);
+            for (int y = 0; y <= kH; y += 20)
+                grain.lineTo (x0 + 0.9f * std::sin ((float) y * 0.021f + (float) (k * 1.7 + side)), (float) y);
+            g.setColour (juce::Colours::black.withAlpha (0.10f + 0.03f * (float) (k % 3)));
+            g.strokePath (grain, juce::PathStrokeType (0.7f));
+        }
+
+    // Panel: deep black with a faint vertical sheen
+    g.setGradientFill (juce::ColourGradient (kPanel.brighter (0.06f), 0, 0, kPanel.darker (0.2f), 0, (float) kLowerY, false));
     g.fillRect (24, 0, kW - 48, kLowerY);
+    // Hairlines between the top-row sections
+    {
+        std::vector<float> ends;
+        for (const auto& bar : bars) if (juce::approximatelyEqual (bar.y, (float) kBarY)) ends.push_back (bar.x2);
+        std::sort (ends.begin(), ends.end());
+        g.setColour (kInk.withAlpha (0.08f));
+        for (size_t i = 0; i + 1 < ends.size(); ++i)
+            g.fillRect (ends[i] + 5.5f, 46.0f, 1.0f, (float) kBarY - 40.0f);
+    }
     g.setColour (kPanel2);
     g.fillRect (24, kLowerY, kKeysX - 24, kH - kLowerY);
     g.setColour (juce::Colours::black);
@@ -769,7 +873,7 @@ void TridexPanel::paint (juce::Graphics& g)
 
     // Header: original wordmark + program display
     g.setColour (kInk);
-    g.setFont (juce::FontOptions (22.0f, juce::Font::bold).withHorizontalScale (1.15f));
+    g.setFont (juce::FontOptions (21.0f, juce::Font::bold).withKerningFactor (0.12f));
     g.drawText ("TRIDEX II", 36, 6, 200, 30, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (9.0f));
     g.setColour (kInk.withAlpha (0.6f));
@@ -787,12 +891,12 @@ void TridexPanel::paint (juce::Graphics& g)
     for (const auto& t : texts)
     {
         g.setColour (kInk.withAlpha (0.92f));
-        g.setFont (juce::FontOptions (t.size, t.bold ? juce::Font::bold : juce::Font::plain));
+        g.setFont (juce::FontOptions (t.size * 0.96f, t.bold ? juce::Font::bold : juce::Font::plain).withKerningFactor (0.05f));
         g.drawFittedText (t.s, t.r.toNearestInt(), t.j, 2, 0.75f);
     }
 
     // Section bars:  ━━━ NAME ━━━
-    const auto barFont = juce::Font (juce::FontOptions (9.5f, juce::Font::bold));
+    const auto barFont = juce::Font (juce::FontOptions (9.0f, juce::Font::bold).withKerningFactor (0.18f));
     g.setFont (barFont);
     for (const auto& b : bars)
     {

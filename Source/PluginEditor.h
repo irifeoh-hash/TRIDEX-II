@@ -66,6 +66,20 @@ private:
     int value = 0;
 };
 
+// Per-part OCTAVE: small up/down buttons beside a value display (-2..+2).
+class OctaveControl : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    OctaveControl (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+private:
+    juce::ParameterAttachment attachment;
+    int value = 0;
+};
+
 // Spring-loaded joystick: X = pitch bend, Y+ = vibrato, Y- = trill.
 class Joystick : public juce::Component, public juce::SettableTooltipClient
 {
@@ -115,7 +129,7 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 1734, kH = 510;
+    static constexpr int kW = 1792, kH = 510;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;
@@ -128,6 +142,7 @@ private:
     juce::Slider& knob (const char* id, int cx, int cy, const juce::String& label, bool white, int size = 38);
     juce::Slider& switchKnob (const char* id, int cx, int cy, const juce::String& label, bool white);
     tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
+    void octave (const char* id, int cx, int y);
     juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,
