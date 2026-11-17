@@ -27,12 +27,12 @@ struct Params
     float master = 0.8f, tuneCents = 0.0f;
     int splitPoint = 60, assignMode = 0;                // 0 = Mode 1, 1 = Mode 2
     float mgSpeed = 5.5f, mgIntensity = 0.5f;           // joystick vibrato/trill
-    bool delayVib = false; float delayVibInt = 0.3f, delayVibTime = 0.8f;
+    bool delayVib = false; float delayVibInt = 0.3f;     // delay time is fixed on the hardware
     float bendRange = 2.0f;
     bool flSynth = false, flBrass = false, flStrings = false;
     float flManual = 0.4f, flIntensity = 0.5f, flFeedback = 0.4f, flSpeed = 0.3f;
     float drift = 0.3f, velSens = 0.0f;
-    int pedalMode = 0;                                  // 0 = sustain, 1 = release switch
+    int pedalMode = 2;                                  // 0 = off, 1 = damper (S-1, Trident), 2 = hold (modern sustain)
 
     // ---- Synthesizer section
     bool synOn = true; Zone synZone = Zone::Both; float synVolume = 0.7f;
@@ -48,15 +48,15 @@ struct Params
     bool br16 = false, br8 = true;
     float brCutoff = 0.4f, brRes = 0.1f, brEgInt = 0.5f;
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
-    bool multiTrig = true;
+    bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
 
     // ---- Strings section
     bool stOn = false; Zone stZone = Zone::Both; float stVolume = 0.6f;
     bool st16 = false, st8 = true, st4 = true;
-    float stAttack = 0.15f, stRelease = 0.8f, kbdBalance = 0.0f;
-    float eqLowDb = 0.0f, eqHighDb = 0.0f;
+    float stAttack = 0.15f, stRelease = 0.8f, kbdBalance = 0.0f;   // kbdBalance 0..1 (key-tracked filter amount)
+    float eqLow = 0.0f, eqHigh = 0.0f;                 // panel scale -5..+5
     bool bowOn = false; float bowLevel = 0.5f, bowTone = 0.5f;
-    bool vibOn = false; float vibDelay = 0.5f, vibIntensity = 0.4f, vibSpeed = 5.5f;
+    bool vibOn = true; float vibDelay = 0.5f, vibIntensity = 0.4f, vibSpeed = 5.5f;
     bool ensembleOn = true;
 };
 
@@ -102,13 +102,14 @@ struct Voice
 {
     int note = -1;
     uint32_t age = 0;
-    bool keyDown = false, synGate = false, brGate = false, stGate = false;
+    bool keyDown = false, synGate = false, brGate = false, stGate = false, damped = false;
     float velocity = 1.0f, driftCents = 0.0f, wander = 0.0f, v2Offset = 0.0f;
 
     DividerVco vco1, vco2;
     Ladder vcf;
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
+    OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
 
     bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || stEnv.isActive(); }
 };
@@ -127,7 +128,7 @@ public:
         for (auto& v : voices)
         {
             v = Voice {};
-            v.vcf.prepare (sr); v.vcf.compensation = 0.3f;   // SSM2044 thins out with resonance
+            v.vcf.prepare (sr); v.vcf.compensation = 1.0f;   // manual's response graph: flat passband as resonance rises
             v.fenv.prepare (sr); v.aenv.prepare (sr);
             v.driftCents = r.bipolar() * 3.0f;
             v.v2Offset = r.bipolar() * 2.0f;
@@ -135,7 +136,7 @@ public:
             v.vco1.mis8 = r.bipolar() * 0.02f; v.vco1.mis16 = r.bipolar() * 0.02f;
             v.vco2.mis8 = r.bipolar() * 0.02f; v.vco2.mis16 = r.bipolar() * 0.02f;
         }
-        brassVcf.prepare (sr); brassEnv.prepare (sr);
+        brassVcf.prepare (sr); brassVcf.compensation = 1.0f; brassEnv.prepare (sr);
         stVib.prepare (0.03f, sr);
         ensemble.prepare (sr);
         flanger.prepare (sr);
@@ -155,8 +156,13 @@ public:
         held[(size_t) note] = true; sustained[(size_t) note] = false;
         if (heldCount++ == 0) delayVibEnv = 0.0f;
 
+        // AUTO DAMP: notes no longer held are muted whenever a new note is played.
+        if (p.autoDamp)
+            for (auto& o : voices) if (! o.keyDown && o.aenv.isActive()) o.damped = true;
+
         Voice& v = allocate (note);
         if (v.keyDown) releaseVoice (v, true);           // stolen while held: keep section counters right
+        v.damped = false;
 
         v.note = note; v.keyDown = true;
         v.velocity = 1.0f - p.velSens * (1.0f - vel);
@@ -165,9 +171,12 @@ public:
         if (sy) { v.fenv.gateOn(); v.aenv.gateOn(); }
         if (br)
         {
+            // TRIGGER: neither switch = single trigger (first note only); MULTIPLE TRIGGER =
+            // every note; TRIGGER SELECT = brass only sounds once SILENCE NOTE keys are held.
             v.brGateEnv.gate = true;
-            if (p.multiTrig || brassHeld == 0) brassEnv.gateOn();
             ++brassHeld;
+            const int threshold = brassThreshold();
+            if (brassHeld == threshold || (brassHeld > threshold && p.multiTrig)) brassEnv.gateOn();
         }
         if (st)
         {
@@ -182,14 +191,14 @@ public:
         if (! held[(size_t) note]) return;
         held[(size_t) note] = false;
         heldCount = std::max (0, heldCount - 1);
-        if (p.pedalMode == 0 && pedal) { sustained[(size_t) note] = true; return; }
+        if (p.pedalMode == 2 && pedal) { sustained[(size_t) note] = true; return; }
         for (auto& v : voices) if (v.note == note && v.keyDown) releaseVoice (v, false);
     }
 
     void setPedal (bool down)
     {
         pedal = down;
-        if (! down && p.pedalMode == 0)
+        if (! down && p.pedalMode == 2)
             for (int n = 0; n < 128; ++n)
                 if (sustained[(size_t) n])
                 {
@@ -222,16 +231,21 @@ public:
             mgPhase += p.mgSpeed * invSr; if (mgPhase >= 1.0) mgPhase -= 1.0;
             const float tri = float (mgPhase < 0.5 ? 4.0 * mgPhase - 1.0 : 3.0 - 4.0 * mgPhase);
             const float trillSq = mgPhase < 0.5 ? 1.0f : 0.0f;
-            delayVibEnv = std::min (1.0f, delayVibEnv + float (invSr / std::max (0.01f, p.delayVibTime)));
-            const float vibSemis = tri * (joyVib * p.mgIntensity * 1.0f + (p.delayVib ? delayVibEnv * p.delayVibInt * 0.6f : 0.0f));
-            const float trillSemis = trillSq * joyTrill * p.mgIntensity * 2.0f;
+            delayVibEnv = std::min (1.0f, delayVibEnv + float (invSr / kDelayVibTime));
+            // With DELAY VIBRATO on, joystick up/down (vibrato & trill) has no effect.
+            const float jv = p.delayVib ? 0.0f : joyVib, jt = p.delayVib ? 0.0f : joyTrill;
+            const float vibSemis = tri * (jv * p.mgIntensity + (p.delayVib ? delayVibEnv * p.delayVibInt * 0.6f : 0.0f));
+            const float trillSemis = trillSq * jt * p.mgIntensity * 2.0f;
             const float globalSemis = p.tuneCents * 0.01f + bend * p.bendRange + vibSemis + trillSemis;
 
             pwmPhase += p.pwmSpeed * invSr; if (pwmPhase >= 1.0) pwmPhase -= 1.0;
             const float pwmTri = float (pwmPhase < 0.5 ? 4.0 * pwmPhase - 1.0 : 3.0 - 4.0 * pwmPhase);
+            // PW: 0 = square, narrowing until the pulse collapses (silence) at 10.
+            // PWM: 0 = no modulation; from ~8 upward the pulse collapses for part of each cycle.
             float pw = 0.5f;
-            if (p.v1Wave == Vco1Wave::PW)  pw = 0.5f - p.pwInt * 0.45f;
-            if (p.v1Wave == Vco1Wave::PWM) pw = 0.5f - p.pwInt * 0.45f * (0.5f + 0.5f * pwmTri);
+            if (p.v1Wave == Vco1Wave::PW)  pw = 0.5f * (1.0f - p.pwInt);
+            if (p.v1Wave == Vco1Wave::PWM) pw = 0.5f * (1.0f - p.pwInt * 1.25f * (0.5f + 0.5f * pwmTri));
+            pw = std::max (0.0f, pw);
 
             float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f;
             bool brassGateOpen = false;
@@ -253,6 +267,8 @@ public:
                     const double dt = v1Oct == 0 ? o1.dt4 : (v1Oct == 1 ? o1.dt8 : o1.dt16);
                     if (p.v1Wave == Vco1Wave::Saw)
                         osc1 = v1Oct == 0 ? o1.saw4 : (v1Oct == 1 ? o1.saw8 : o1.saw16);
+                    else if (pw < 0.004f)
+                        osc1 = 0.0f;                              // pulse has collapsed: VCO shut off
                     else
                     {
                         osc1 = ph < pw ? 1.0f : -1.0f;
@@ -271,7 +287,7 @@ public:
 
                     const float fe = v.fenv.process();
                     const float ae = v.aenv.process();
-                    const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 8.0f + kbd * ((float) v.note - 60.0f) / 12.0f;
+                    const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.note - 60.0f) / 12.0f;
                     v.vcf.setCutoff (20.0f * std::exp2 (cutOct), p.res);
                     synSum += v.vcf.process ((osc1 + osc2) * 0.35f) * ae * attenGain * v.velocity;
                     if (! v.aenv.isActive()) v.vcf.reset();
@@ -289,8 +305,8 @@ public:
                 if (v.stEnv.isActive())
                 {
                     const float e = v.stEnv.process();
-                    const float bal = std::exp2 (p.kbdBalance * ((float) v.note - 66.0f) / 24.0f);
-                    const float sig = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * bal;
+                    const float raw = (p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f);
+                    const float sig = v.balLp2.process (v.balLp1.process (raw));
                     stSum += sig * e * v.velocity;
                     if (p.bowOn) bowSum += sig * v.bowEnv.value * e;
                     v.bowEnv.value *= bowDecay;
@@ -348,8 +364,9 @@ private:
         return z == Zone::Lower ? note < p.splitPoint : note >= p.splitPoint;
     }
 
-    // KLM-377 key assigner. Mode 1: rotating assignment. Mode 2: re-use the
-    // voice that last played this note, else the lowest free voice.
+    // KLM-377 key assigner (owner's manual p.4/42):
+    //  Mode 1: a different unit for each note, so every note keeps its own release.
+    //  Mode 2: the same unit plays each new note; the previous note's release is cut.
     Voice& allocate (int note)
     {
         for (auto& v : voices) if (v.note == note && v.isActive()) return stamp (v);
@@ -364,8 +381,7 @@ private:
         }
         else
         {
-            for (auto& v : voices) if (! v.isActive() && v.note == note) return stamp (v);
-            for (auto& v : voices) if (! v.isActive()) return stamp (v);
+            for (auto& v : voices) if (! v.keyDown) return stamp (v);   // lowest unit not held, even if releasing
         }
         // Steal: oldest released voice, else oldest held.
         Voice* best = nullptr;
@@ -373,6 +389,8 @@ private:
         if (! best) for (auto& v : voices) if (! best || v.age < best->age) best = &v;
         return stamp (*best);
     }
+
+    int brassThreshold() const { return p.trigSelect ? 2 * (std::clamp (p.silenceNote, 0, 3) + 1) : 1; }
 
     Voice& stamp (Voice& v) { v.age = ++ageCounter; return v; }
 
@@ -383,7 +401,9 @@ private:
         if (v.brGate)
         {
             v.brGateEnv.gate = false;
-            if (--brassHeld <= 0) { brassHeld = 0; if (! stolen) brassEnv.gateOff(); }
+            const bool wasOn = brassHeld >= brassThreshold();
+            brassHeld = std::max (0, brassHeld - 1);
+            if (wasOn && brassHeld < brassThreshold() && ! stolen) brassEnv.gateOff();
         }
         if (v.stGate) { v.stEnv.gate = false; stringsHeld = std::max (0, stringsHeld - 1); }
         v.synGate = v.brGate = v.stGate = false;
@@ -391,23 +411,31 @@ private:
 
     void updateCoefficients()
     {
-        // Auto Damp: release tails are cut short unless the release foot switch is down.
-        const bool damp = p.autoDamp && ! (p.pedalMode == 1 && pedal);
-        const float sfR = damp ? 0.012f : p.sfR, saR = damp ? 0.012f : p.saR;
+        // DAMPER jack (S-1): switch UP = programmed release ignored (release 0), DOWN = programmed release.
+        const bool damperUp = p.pedalMode == 1 && ! pedal;
         for (auto& v : voices)
         {
-            v.fenv.set (p.sfA, p.sfD, p.sfS, sfR);
-            v.aenv.set (p.saA, p.saD, p.saS, saR);
+            const bool cut = damperUp || v.damped;
+            v.fenv.set (p.sfA, p.sfD, p.sfS, cut ? 0.006f : p.sfR);
+            v.aenv.set (p.saA, p.saD, p.saS, cut ? 0.006f : p.saR);
+            if (v.note >= 0)
+            {
+                // KBD BALANCE: low notes mellower, high notes brighter.
+                const float noteHz = midiToHz ((float) v.note);
+                const float hz = std::exp2 (std::log2 (18000.0f) + p.kbdBalance * (std::log2 (noteHz * 3.0f) - std::log2 (18000.0f)));
+                v.balLp1.set (hz, sr); v.balLp2.set (hz, sr);
+            }
             v.brGateEnv.set (0.002f, std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
             v.stEnv.set (p.stAttack, p.stRelease, sr);
         }
         brassEnv.set (p.brA, p.brD, p.brS, p.brR);
         bowDecay = std::exp (-1.0f / (0.12f * sr));
         bowBp.bandPass (400.0f * std::exp2 (p.bowTone * 3.0f), 1.8f, sr);
-        eqLoL.lowShelf (180.0f, p.eqLowDb, sr);   eqLoR.lowShelf (180.0f, p.eqLowDb, sr);
-        eqHiL.highShelf (3500.0f, p.eqHighDb, sr); eqHiR.highShelf (3500.0f, p.eqHighDb, sr);
+        eqLoL.lowShelf (180.0f, p.eqLow * 2.0f, sr);   eqLoR.lowShelf (180.0f, p.eqLow * 2.0f, sr);
+        eqHiL.highShelf (3500.0f, p.eqHigh * 2.0f, sr); eqHiR.highShelf (3500.0f, p.eqHigh * 2.0f, sr);
     }
 
+    static constexpr float kDelayVibTime = 0.6f;   // fixed on the hardware
     float sr = 44100.0f;
     std::array<Voice, kVoices> voices;
     uint32_t ageCounter = 0;

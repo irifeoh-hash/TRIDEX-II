@@ -1,54 +1,129 @@
 #pragma once
+// Hardware-style panel. Control placement follows the Trident Mk II front
+// panel (owner's manual pp. 4-42): left-to-right Key Assign, Flanger,
+// Synthesizer (with Programmer and Mixer strip), Brass, Strings, Output; the
+// Delay Vibrato and Joystick panel sit to the left of the 61-key keyboard.
+// Artwork and branding are original.
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 
-class TridexLookAndFeel : public juce::LookAndFeel_V4
+namespace tdxui
+{
+class PanelLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    TridexLookAndFeel();
+    PanelLookAndFeel();
     void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
                            float startAngle, float endAngle, juce::Slider&) override;
+    juce::Font getPopupMenuFont() override { return juce::FontOptions (13.0f); }
+};
+
+// Cream push button with a red LED above the cap (as on the hardware switch strips).
+class LedButton : public juce::Button
+{
+public:
+    explicit LedButton (const juce::String& name) : juce::Button (name) {}
+    bool lit = false;            // used when not a toggle (programmer buttons)
+    bool redCap = false;         // WRITE button
+    void paintButton (juce::Graphics&, bool over, bool down) override;
+};
+
+// Two-position slide switch (ASSIGN MODE 1/2).
+class SlideSwitch : public juce::ToggleButton
+{
+public:
+    void paintButton (juce::Graphics&, bool, bool) override;
+};
+
+// KBD SPLIT selector: two arrow LEDs, L / L+H / H.
+class SplitSelector : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    SplitSelector (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+
+private:
+    juce::RangedAudioParameter& param;
+    juce::ParameterAttachment attachment;
+    int zone = 1; // 0 L, 1 L+H, 2 H
+};
+
+// Spring-loaded joystick: X = pitch bend, Y+ = vibrato, Y- = trill.
+class Joystick : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    Joystick (std::atomic<float>& x, std::atomic<float>& y) : jx (x), jy (y) {}
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent& e) override { mouseDrag (e); }
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+
+private:
+    std::atomic<float>& jx;
+    std::atomic<float>& jy;
+    juce::Point<float> pos;
+};
+} // namespace tdxui
+
+//==============================================================================
+class TridexPanel : public juce::Component, private juce::Timer
+{
+public:
+    static constexpr int kW = 1560, kH = 510;
+
+    explicit TridexPanel (TridexProcessor&);
+    ~TridexPanel() override;
+    void paint (juce::Graphics&) override;
+
+private:
+    struct Text { juce::Rectangle<float> r; juce::String s; float size; bool bold; juce::Justification j; };
+    struct Bar  { float x1, x2, y; juce::String s; };
+
+    juce::Slider& knob (const char* id, int cx, int cy, const juce::String& label, bool white, int size = 38);
+    juce::Slider& switchKnob (const char* id, int cx, int cy, const juce::String& label, bool white);
+    tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
+    tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
+    void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,
+               juce::Justification j = juce::Justification::centred);
+    void moduleLabel (float x1, float x2, float y, const juce::String& s) { text ({ x1, y, x2 - x1, 12 }, s, 9.5f, true); }
+    void sectionBar (float x1, float x2, float y, const juce::String& s) { bars.push_back ({ x1, x2, y, s }); }
+
+    void timerCallback() override;
+    void bankPressed (int bank);
+    void programPressed (int number);
+
+    TridexProcessor& proc;
+    tdxui::PanelLookAndFeel lnf;
+
+    std::vector<std::unique_ptr<juce::Component>> owned;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> pedalAtt;
+    std::vector<Text> texts;
+    std::vector<Bar> bars;
+
+    tdxui::LedButton* writeBtn = nullptr;
+    tdxui::LedButton* manualBtn = nullptr;
+    std::array<tdxui::LedButton*, 4> bankBtns {};
+    std::array<tdxui::LedButton*, 8> progBtns {};
+    bool writeArmed = false;
+    int pendingBank = 0;
+    juce::Rectangle<int> lcd;
+    juce::String lcdText;
+
+    juce::ComboBox pedalBox;
+    juce::MidiKeyboardComponent keyboard { proc.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard };
 };
 
 class TridexEditor : public juce::AudioProcessorEditor
 {
 public:
     explicit TridexEditor (TridexProcessor&);
-    ~TridexEditor() override;
-
-    void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    struct Control
-    {
-        juce::String id, label;
-        std::unique_ptr<juce::Slider> slider;
-        std::unique_ptr<juce::ComboBox> combo;
-        std::unique_ptr<juce::ToggleButton> toggle;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sAtt;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> cAtt;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bAtt;
-        juce::Component* comp() const;
-    };
-
-    struct Section
-    {
-        juce::String title;
-        juce::Colour colour;
-        int columns;
-        std::vector<std::unique_ptr<Control>> controls;
-        juce::Rectangle<int> bounds;
-    };
-
-    void addSection (const juce::String& title, juce::Colour c, int columns, std::initializer_list<const char*> ids);
-
-    TridexProcessor& proc;
-    TridexLookAndFeel lnf;
-    std::vector<Section> sections;
-    juce::ComboBox programBox;
-    juce::MidiKeyboardComponent keyboard { proc.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard };
-
+    TridexPanel panel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TridexEditor)
 };

@@ -42,9 +42,9 @@ int main (int argc, char** argv)
     tdx::Params synth; fails += render ("polysynth", synth, out);
     tdx::Params pwm;   pwm.v1Wave = tdx::Vco1Wave::PWM; pwm.pwInt = 0.8f; pwm.v2Scale = 0; fails += render ("pwm", pwm, out);
     tdx::Params brass; brass.synOn = false; brass.brOn = true; brass.br16 = true; fails += render ("brass", brass, out);
-    tdx::Params str;   str.synOn = false; str.stOn = true; str.vibOn = true; str.bowOn = true; fails += render ("strings", str, out);
+    tdx::Params str;   str.synOn = false; str.stOn = true; str.kbdBalance = 0.7f; str.bowOn = true; fails += render ("strings", str, out);
     tdx::Params all;   all.brOn = all.stOn = true; all.res = 0.95f; all.master = 1.0f;
-    all.flSynth = all.flStrings = true; all.flFeedback = 0.9f; all.autoDamp = true; all.assignMode = 1; fails += render ("all_hot", all, out);
+    all.flSynth = all.flStrings = true; all.flFeedback = 0.9f; all.autoDamp = true; all.assignMode = 1; all.trigSelect = true; all.silenceNote = 1; fails += render ("all_hot", all, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

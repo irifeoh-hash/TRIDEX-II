@@ -356,7 +356,7 @@ struct Flanger
             // Right channel sweeps in quadrature for width.
             const float t = c == 0 ? tri : -tri;
             const float ms = std::max (0.1f, baseMs * (1.0f + intensity * 0.9f * t));
-            dl[c].push (softClip (io[c] + fb[c] * feedback * 0.92f));
+            dl[c].push (softClip (io[c] + fb[c] * feedback * 0.97f));   // can self-oscillate, as the manual warns
             const float wet = lp[c].process (dl[c].read (ms * 0.001f * sr));
             fb[c] = wet;
             io[c] = 0.5f * (io[c] + wet);

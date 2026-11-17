@@ -12,7 +12,8 @@ namespace
 const juce::StringArray kFootage { "16'", "8'", "4'" };
 const juce::StringArray kZones   { "L", "L+H", "H" };
 
-NR timeRange (float maxSec) { NR r (0.001f, maxSec); r.setSkewForCentre (0.4f); return r; }
+// Owner's manual: Attack, Decay and Release range from ~1 ms to over 15 s.
+NR timeRange (float maxSec) { NR r (0.001f, maxSec); r.setSkewForCentre (0.5f); return r; }
 
 void addF (juce::AudioProcessorValueTreeState::ParameterLayout& l, const char* id, const char* name, NR r, float def, const char* unit = "")
 {
@@ -39,55 +40,55 @@ void addB (juce::AudioProcessorValueTreeState::ParameterLayout& l, const char* i
 juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout l;
-    const NR unit (0.0f, 1.0f);
-    const NR dB10 (-10.0f, 10.0f), dB12 (-12.0f, 12.0f);
+    const NR unit (0.0f, 1.0f), bip (-1.0f, 1.0f), eq (-5.0f, 5.0f);
 
-    // ---- Total control
-    addF (l, "master",      "Total Volume", unit, 0.8f);
-    addF (l, "tune",        "Tune", NR (-100.0f, 100.0f), 0.0f, "ct");
-    addF (l, "split",       "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);
-    addC (l, "assign",      "Assign Mode", { "1", "2" }, 0);
-    addF (l, "mg_speed",    "Joystick Speed", NR (0.5f, 15.0f, 0.0f, 0.5f), 5.5f, "Hz");
-    addF (l, "mg_int",      "Joystick Intensity", unit, 0.5f);
-    addB (l, "dvib_on",     "Delay Vibrato", false);
-    addF (l, "dvib_int",    "Delay Vib Int", unit, 0.3f);
-    addF (l, "dvib_time",   "Delay Vib Time", NR (0.05f, 4.0f, 0.0f, 0.5f), 0.8f, "s");
-    addF (l, "bend_range",  "Bend Range", NR (0.0f, 12.0f, 1.0f), 2.0f, "st");
-    addB (l, "fl_syn",      "Flanger Synth", false);
-    addB (l, "fl_br",       "Flanger Brass", false);
-    addB (l, "fl_st",       "Flanger Strings", false);
-    addF (l, "fl_manual",   "Flanger Manual", unit, 0.4f);
-    addF (l, "fl_int",      "Flanger Intensity", unit, 0.5f);
-    addF (l, "fl_fb",       "Flanger Feedback", unit, 0.4f);
-    addF (l, "fl_speed",    "Flanger Speed", NR (0.05f, 8.0f, 0.0f, 0.4f), 0.3f, "Hz");
-    addF (l, "drift",       "Drift", unit, 0.3f);
-    addF (l, "vel_sens",    "Velocity", unit, 0.0f);
-    addC (l, "pedal_mode",  "Pedal Mode", { "Hold", "Rel SW" }, 0);
+    // ---- Key assign / total control
+    addF (l, "master",     "Total Volume", unit, 0.8f);
+    addF (l, "tune",       "Total Tune", NR (-100.0f, 100.0f), 0.0f, "ct");
+    addB (l, "assign2",    "Assign Mode 2", false);
+    addF (l, "mg_speed",   "Joystick Speed", NR (0.5f, 15.0f, 0.0f, 0.5f), 5.5f, "Hz");
+    addF (l, "mg_int",     "Joystick Intensity", unit, 0.5f);
+    addB (l, "dvib_on",    "Delay Vibrato", false);
+    addF (l, "dvib_int",   "Delay Vibrato Intensity", unit, 0.3f);
+    addB (l, "fl_syn",     "Flanger Synthe", false);
+    addB (l, "fl_br",      "Flanger Brass", false);
+    addB (l, "fl_st",      "Flanger Strings", false);
+    addF (l, "fl_manual",  "Flanger Manual", unit, 0.4f);
+    addF (l, "fl_int",     "Flanger Intensity", unit, 0.5f);
+    addF (l, "fl_fb",      "Flanger Feedback", unit, 0.4f);
+    addF (l, "fl_speed",   "Flanger Speed", NR (0.05f, 8.0f, 0.0f, 0.4f), 0.3f, "Hz");
 
-    // ---- Synthesizer section
-    addB (l, "syn_on",     "Synth Output", true);
-    addC (l, "syn_zone",   "Synth Split", kZones, 1);
-    addF (l, "syn_vol",    "Synth Volume", unit, 0.7f);
-    addC (l, "v1_oct",     "VCO1 Octave", kFootage, 1);
-    addC (l, "v1_wave",    "VCO1 Wave", { "Saw", "PW", "PWM" }, 0);
-    addF (l, "pw_int",     "PW/PWM Int", unit, 0.3f);
-    addF (l, "pwm_speed",  "PWM Speed", NR (0.1f, 12.0f, 0.0f, 0.5f), 1.0f, "Hz");
-    addC (l, "v2_scale",   "VCO2 Scale", { "Off", "16'", "8'", "4'" }, 2);
-    addF (l, "v2_detune",  "VCO2 Detune", NR (-50.0f, 50.0f), 6.0f, "ct");
-    addF (l, "cutoff",     "Synth Cutoff", unit, 0.6f);
-    addF (l, "res",        "Synth Resonance", unit, 0.15f);
-    addF (l, "eg_int",     "Synth EG Intensity", NR (-1.0f, 1.0f), 0.3f);
-    addC (l, "kbd_track",  "KBD Track", { "Off", "Quarter", "Half", "Full", "Over" }, 2);
-    addF (l, "sf_a", "VCF Attack",  timeRange (10.0f), 0.01f, "s");
-    addF (l, "sf_d", "VCF Decay",   timeRange (10.0f), 0.6f,  "s");
-    addF (l, "sf_s", "VCF Sustain", unit, 0.4f);
-    addF (l, "sf_r", "VCF Release", timeRange (10.0f), 0.4f,  "s");
-    addF (l, "sa_a", "VCA Attack",  timeRange (10.0f), 0.005f, "s");
-    addF (l, "sa_d", "VCA Decay",   timeRange (10.0f), 0.5f,  "s");
-    addF (l, "sa_s", "VCA Sustain", unit, 0.8f);
-    addF (l, "sa_r", "VCA Release", timeRange (10.0f), 0.4f,  "s");
-    addF (l, "vca_att",    "VCA Attenuator", dB10, 0.0f, "dB");
-    addB (l, "auto_damp",  "Auto Damp", false);
+    // ---- Plugin extras (not on the hardware panel)
+    addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // hardware: fixed, lower 2 / upper 3 octaves
+    addF (l, "bend_range", "Bend Range", NR (0.0f, 12.0f, 1.0f), 2.0f, "st");
+    addF (l, "drift",      "Analog Drift", unit, 0.3f);
+    addF (l, "vel_sens",   "Velocity Sens", unit, 0.0f);
+    addC (l, "pedal_mode", "Pedal Mode", { "Off", "Damper (S-1)", "Hold" }, 2);
+
+    // ---- Synthesizer section (programmable)
+    addB (l, "syn_on",    "Synthe Output", true);
+    addC (l, "syn_zone",  "Synthe Split", kZones, 1);
+    addF (l, "syn_vol",   "Synthe Volume", unit, 0.7f);
+    addC (l, "v1_oct",    "VCO1 Octave", kFootage, 1);
+    addC (l, "v1_wave",   "VCO1 Waveform", { "Saw", "PW", "PWM" }, 0);
+    addF (l, "pw_int",    "PW/PWM", unit, 0.3f);
+    addF (l, "pwm_speed", "PWM Speed", NR (0.1f, 12.0f, 0.0f, 0.5f), 1.0f, "Hz");
+    addC (l, "v2_scale",  "VCO2 Octave", { "Off", "16'", "8'", "4'" }, 2);
+    addF (l, "v2_detune", "VCO2 Detune", NR (-50.0f, 50.0f), 6.0f, "ct");
+    addF (l, "cutoff",    "Cutoff Freq", unit, 0.6f);
+    addF (l, "res",       "Resonance", unit, 0.15f);
+    addF (l, "eg_int",    "EG Intensity", bip, 0.2f);
+    addC (l, "kbd_track", "KBD Track", { "Off", "Quarter", "Half", "Full", "Over" }, 2);
+    addF (l, "sf_a", "VCF EG Attack",  timeRange (15.0f), 0.01f, "s");
+    addF (l, "sf_d", "VCF EG Decay",   timeRange (15.0f), 0.6f,  "s");
+    addF (l, "sf_s", "VCF EG Sustain", unit, 0.4f);
+    addF (l, "sf_r", "VCF EG Release", timeRange (15.0f), 0.4f,  "s");
+    addF (l, "sa_a", "VCA EG Attack",  timeRange (15.0f), 0.005f, "s");
+    addF (l, "sa_d", "VCA EG Decay",   timeRange (15.0f), 0.5f,  "s");
+    addF (l, "sa_s", "VCA EG Sustain", unit, 0.8f);
+    addF (l, "sa_r", "VCA EG Release", timeRange (15.0f), 0.4f,  "s");
+    addF (l, "vca_att",   "Attenuator", NR (-10.0f, 10.0f), 0.0f, "dB");
+    addB (l, "auto_damp", "Auto Damp", false);
 
     // ---- Brass section
     addB (l, "br_on",     "Brass Output", false);
@@ -95,14 +96,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "br_vol",    "Brass Volume", unit, 0.6f);
     addB (l, "br_16",     "Brass 16'", false);
     addB (l, "br_8",      "Brass 8'", true);
-    addF (l, "br_cutoff", "Brass Cutoff", unit, 0.4f);
+    addF (l, "br_cutoff", "Brass Cutoff Freq", unit, 0.4f);
     addF (l, "br_res",    "Brass Resonance", unit, 0.1f);
-    addF (l, "br_egint",  "Brass EG Intensity", NR (-1.0f, 1.0f), 0.5f);
-    addF (l, "br_a", "Brass Attack",  timeRange (10.0f), 0.08f, "s");
-    addF (l, "br_d", "Brass Decay",   timeRange (10.0f), 0.5f,  "s");
+    addF (l, "br_egint",  "Brass EG Intensity", unit, 0.5f);
+    addF (l, "br_a", "Brass Attack",  timeRange (15.0f), 0.08f, "s");
+    addF (l, "br_d", "Brass Decay",   timeRange (15.0f), 0.5f,  "s");
     addF (l, "br_s", "Brass Sustain", unit, 0.7f);
-    addF (l, "br_r", "Brass Release", timeRange (10.0f), 0.3f,  "s");
-    addB (l, "br_multi",  "Multi Trig", true);
+    addF (l, "br_r", "Brass Release", timeRange (15.0f), 0.3f,  "s");
+    addB (l, "br_multi",  "Multiple Trigger", false);
+    addB (l, "br_tsel",   "Trigger Select", false);
+    addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
 
     // ---- Strings section
     addB (l, "st_on",      "Strings Output", false);
@@ -111,21 +114,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "st_16",      "Strings 16'", false);
     addB (l, "st_8",       "Strings 8'", true);
     addB (l, "st_4",       "Strings 4'", true);
-    addF (l, "st_attack",  "Strings Attack",  timeRange (5.0f), 0.15f, "s");
-    addF (l, "st_release", "Strings Release", timeRange (10.0f), 0.8f, "s");
-    addF (l, "st_balance", "KBD Balance", NR (-1.0f, 1.0f), 0.0f);
-    addF (l, "st_eq_lo",   "Strings EQ Low", dB12, 0.0f, "dB");
-    addF (l, "st_eq_hi",   "Strings EQ High", dB12, 0.0f, "dB");
+    addF (l, "st_attack",  "Strings Attack",  timeRange (15.0f), 0.15f, "s");
+    addF (l, "st_release", "Strings Release", timeRange (15.0f), 0.8f, "s");
+    addF (l, "st_balance", "KBD Balance", unit, 0.0f);
+    addF (l, "st_eq_hi",   "Equalizer High", eq, 0.0f);
+    addF (l, "st_eq_lo",   "Equalizer Low", eq, 0.0f);
     addB (l, "bow_on",     "Bowing", false);
     addF (l, "bow_level",  "Bowing Level", unit, 0.5f);
     addF (l, "bow_tone",   "Bowing Tone", unit, 0.5f);
-    addB (l, "svib_on",    "Strings Vibrato", false);
-    addF (l, "svib_delay", "Vib Delay", NR (0.01f, 3.0f, 0.0f, 0.5f), 0.5f, "s");
-    addF (l, "svib_int",   "Vib Intensity", unit, 0.4f);
-    addF (l, "svib_speed", "Vib Speed", NR (1.0f, 10.0f), 5.5f, "Hz");
-    addB (l, "ensemble",   "Ensemble", true);
+    addB (l, "svib_off",   "Vibrato Off", false);
+    addF (l, "svib_delay", "Vibrato Delay Time", NR (0.01f, 3.0f, 0.0f, 0.5f), 0.5f, "s");
+    addF (l, "svib_int",   "Vibrato Intensity", unit, 0.25f);
+    addF (l, "svib_speed", "Vibrato Speed", NR (1.0f, 10.0f), 5.5f, "Hz");
+    addB (l, "ens_off",    "Ensemble Off", false);
 
     return l;
+}
+
+const juce::StringArray& TridexProcessor::programmableIds()
+{
+    // Items marked * in the spec sheet: VCO1, VCO2, VCF, VCF EG, VCA attenuator, VCA EG, Auto Damp.
+    static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune",
+                                         "cutoff", "res", "eg_int", "kbd_track",
+                                         "sf_a", "sf_d", "sf_s", "sf_r", "sa_a", "sa_d", "sa_s", "sa_r",
+                                         "vca_att", "auto_damp" };
+    return ids;
 }
 
 //==============================================================================
@@ -133,6 +146,20 @@ TridexProcessor::TridexProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "TRIDEX", createLayout())
 {
+    // Fill the 32 slots from the factory set (defaults + overrides), rest = Init.
+    const auto& factory = tdx::factoryPresets();
+    for (int i = 0; i < kNumPrograms; ++i)
+    {
+        auto& prog = programs[(size_t) i];
+        const bool has = i < (int) factory.size();
+        prog.name = has ? juce::String (factory[(size_t) i].name) : "Init";
+        for (auto& id : programmableIds())
+            if (auto* rp = apvts.getParameter (id))
+                prog.values[id] = rp->convertFrom0to1 (rp->getDefaultValue());
+        if (has)
+            for (const auto& [id, v] : factory[(size_t) i].values)
+                prog.values[juce::String (id)] = v;
+    }
 }
 
 bool TridexProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -153,13 +180,13 @@ void TridexProcessor::syncParams()
     const auto idx  = [this] (const char* id) { return (int) get (id); };
     const auto zone = [&] (const char* id) { return static_cast<tdx::Zone> (idx (id)); };
 
-    p.master = get ("master"); p.tuneCents = get ("tune"); p.splitPoint = idx ("split"); p.assignMode = idx ("assign");
+    p.master = get ("master"); p.tuneCents = get ("tune"); p.assignMode = on ("assign2") ? 1 : 0;
     p.mgSpeed = get ("mg_speed"); p.mgIntensity = get ("mg_int");
-    p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int"); p.delayVibTime = get ("dvib_time");
-    p.bendRange = get ("bend_range");
+    p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int");
     p.flSynth = on ("fl_syn"); p.flBrass = on ("fl_br"); p.flStrings = on ("fl_st");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
-    p.drift = get ("drift"); p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode");
+    p.splitPoint = idx ("split"); p.bendRange = get ("bend_range"); p.drift = get ("drift");
+    p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode");
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));
@@ -174,33 +201,44 @@ void TridexProcessor::syncParams()
     p.br16 = on ("br_16"); p.br8 = on ("br_8");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
-    p.multiTrig = on ("br_multi");
+    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.silenceNote = idx ("br_silence");
 
     p.stOn = on ("st_on"); p.stZone = zone ("st_zone"); p.stVolume = get ("st_vol");
     p.st16 = on ("st_16"); p.st8 = on ("st_8"); p.st4 = on ("st_4");
     p.stAttack = get ("st_attack"); p.stRelease = get ("st_release"); p.kbdBalance = get ("st_balance");
-    p.eqLowDb = get ("st_eq_lo"); p.eqHighDb = get ("st_eq_hi");
+    p.eqLow = get ("st_eq_lo"); p.eqHigh = get ("st_eq_hi");
     p.bowOn = on ("bow_on"); p.bowLevel = get ("bow_level"); p.bowTone = get ("bow_tone");
-    p.vibOn = on ("svib_on"); p.vibDelay = get ("svib_delay"); p.vibIntensity = get ("svib_int"); p.vibSpeed = get ("svib_speed");
-    p.ensembleOn = on ("ensemble");
+    p.vibOn = ! on ("svib_off"); p.vibDelay = get ("svib_delay"); p.vibIntensity = get ("svib_int"); p.vibSpeed = get ("svib_speed");
+    p.ensembleOn = ! on ("ens_off");
 }
 
 void TridexProcessor::handleMidi (const juce::MidiMessage& m)
 {
-    if (m.isNoteOn())                 engine.noteOn (m.getNoteNumber(), m.getFloatVelocity());
-    else if (m.isNoteOff())           engine.noteOff (m.getNoteNumber());
-    else if (m.isPitchWheel())        engine.pitchBend ((float) (m.getPitchWheelValue() - 8192) / 8192.0f);
-    else if (m.isSustainPedalOn())    engine.setPedal (true);
-    else if (m.isSustainPedalOff())   engine.setPedal (false);
-    else if (m.isControllerOfType (1)) { joyVib = (float) m.getControllerValue() / 127.0f;   engine.joystickY (joyVib, joyTrill); }
-    else if (m.isControllerOfType (2)) { joyTrill = (float) m.getControllerValue() / 127.0f; engine.joystickY (joyVib, joyTrill); }
+    if (m.isNoteOn())                  engine.noteOn (m.getNoteNumber(), m.getFloatVelocity());
+    else if (m.isNoteOff())            engine.noteOff (m.getNoteNumber());
+    else if (m.isPitchWheel())         { midiBend = (float) (m.getPitchWheelValue() - 8192) / 8192.0f; applyJoystick(); }
+    else if (m.isSustainPedalOn())     engine.setPedal (true);
+    else if (m.isSustainPedalOff())    engine.setPedal (false);
+    else if (m.isControllerOfType (1)) { midiVib   = (float) m.getControllerValue() / 127.0f; applyJoystick(); }
+    else if (m.isControllerOfType (2)) { midiTrill = (float) m.getControllerValue() / 127.0f; applyJoystick(); }
     else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
+    else if (m.isProgramChange())      recallProgram (m.getProgramChangeNumber() % kNumPrograms);
+}
+
+// Joystick X = pitch bend, Y+ = vibrato, Y- = trill. MIDI and the on-screen stick add.
+void TridexProcessor::applyJoystick()
+{
+    const float gx = guiJoyX.load(), gy = guiJoyY.load();
+    engine.pitchBend (juce::jlimit (-1.0f, 1.0f, midiBend + gx));
+    engine.joystickY (juce::jlimit (0.0f, 1.0f, midiVib + juce::jmax (0.0f, gy)),
+                      juce::jlimit (0.0f, 1.0f, midiTrill + juce::jmax (0.0f, -gy)));
 }
 
 void TridexProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
     syncParams();
+    applyJoystick();
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
     buffer.clear();
 
@@ -220,41 +258,78 @@ void TridexProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 }
 
 //==============================================================================
-int TridexProcessor::getNumPrograms() { return (int) tdx::factoryPresets().size(); }
-
 const juce::String TridexProcessor::getProgramName (int index)
 {
-    const auto& presets = tdx::factoryPresets();
-    return juce::isPositiveAndBelow (index, (int) presets.size()) ? juce::String (presets[(size_t) index].name) : juce::String();
+    if (! juce::isPositiveAndBelow (index, kNumPrograms)) return {};
+    return juce::String::charToString ((juce::juce_wchar) ('A' + index / 8)) + juce::String (index % 8 + 1)
+           + " " + programs[(size_t) index].name;
 }
 
-void TridexProcessor::setCurrentProgram (int index)
+void TridexProcessor::changeProgramName (int index, const juce::String& name)
 {
-    const auto& presets = tdx::factoryPresets();
-    if (! juce::isPositiveAndBelow (index, (int) presets.size())) return;
+    if (juce::isPositiveAndBelow (index, kNumPrograms)) programs[(size_t) index].name = name;
+}
+
+void TridexProcessor::recallProgram (int index)
+{
+    if (! juce::isPositiveAndBelow (index, kNumPrograms)) return;
     currentProgram = index;
-
-    // Reset everything to defaults, then apply the preset's overrides.
-    for (auto* param : getParameters())
-        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (param))
-            rp->setValueNotifyingHost (rp->getDefaultValue());
-
-    for (const auto& [id, value] : presets[(size_t) index].values)
+    manualMode = false;
+    for (const auto& [id, value] : programs[(size_t) index].values)
         if (auto* rp = apvts.getParameter (id))
             rp->setValueNotifyingHost (rp->convertTo0to1 (value));
+}
+
+void TridexProcessor::writeProgram (int index)
+{
+    if (! juce::isPositiveAndBelow (index, kNumPrograms)) return;
+    auto& prog = programs[(size_t) index];
+    for (auto& id : programmableIds())
+        prog.values[id] = apvts.getRawParameterValue (id)->load();
+    if (prog.name == "Init") prog.name = "User";
+    currentProgram = index;
+    manualMode = false;
 }
 
 void TridexProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+    juce::ValueTree progs ("PROGRAMS");
+    progs.setProperty ("current", currentProgram, nullptr);
+    progs.setProperty ("manual", manualMode, nullptr);
+    for (int i = 0; i < kNumPrograms; ++i)
+    {
+        juce::ValueTree pt ("P");
+        pt.setProperty ("name", programs[(size_t) i].name, nullptr);
+        for (const auto& [id, v] : programs[(size_t) i].values) pt.setProperty (id, v, nullptr);
+        progs.appendChild (pt, nullptr);
+    }
+    state.removeChild (state.getChildWithName ("PROGRAMS"), nullptr);
+    state.appendChild (progs, nullptr);
     if (auto xml = state.createXml()) copyXmlToBinary (*xml, destData);
 }
 
 void TridexProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    if (auto xml = getXmlFromBinary (data, sizeInBytes))
-        if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    auto xml = getXmlFromBinary (data, sizeInBytes);
+    if (! xml || ! xml->hasTagName (apvts.state.getType())) return;
+    auto state = juce::ValueTree::fromXml (*xml);
+
+    if (auto progs = state.getChildWithName ("PROGRAMS"); progs.isValid())
+    {
+        currentProgram = juce::jlimit (0, kNumPrograms - 1, (int) progs.getProperty ("current", 0));
+        manualMode = (bool) progs.getProperty ("manual", true);
+        for (int i = 0; i < juce::jmin (kNumPrograms, progs.getNumChildren()); ++i)
+        {
+            auto pt = progs.getChild (i);
+            auto& prog = programs[(size_t) i];
+            prog.name = pt.getProperty ("name", prog.name).toString();
+            for (auto& id : programmableIds())
+                if (pt.hasProperty (id)) prog.values[id] = (float) pt.getProperty (id);
+        }
+        state.removeChild (progs, nullptr);
+    }
+    apvts.replaceState (state);
 }
 
 juce::AudioProcessorEditor* TridexProcessor::createEditor() { return new TridexEditor (*this); }
