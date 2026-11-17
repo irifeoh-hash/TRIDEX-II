@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write   # lets the Windows job publish the download as a Release
+
 jobs:
   build:
     strategy:
@@ -50,3 +53,24 @@ jobs:
         with:
           name: Tridex80-${{ matrix.name }}
           path: dist
+
+      # Windows: publish a ready-to-download zip as the "latest" Release.
+      - name: Publish Windows download
+        if: runner.os == 'Windows' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > dist/README.txt <<'TXT'
+          Tridex 80 - Windows 64-bit VST3
+
+          1. Copy the whole "Tridex 80.vst3" folder into:
+               C:\Program Files\Common Files\VST3
+          2. Rescan plugins in your DAW (FL Studio: Options > Manage plugins > Find installed plugins).
+             It appears as an instrument: "Tridex Audio - Tridex 80".
+          TXT
+          cd dist && 7z a -tzip ../Tridex80-Windows-VST3.zip "Tridex 80.vst3" README.txt && cd ..
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest Tridex80-Windows-VST3.zip --title "Tridex 80 (latest build)" \
+            --notes "Windows 64-bit VST3. Download Tridex80-Windows-VST3.zip below, unzip, copy 'Tridex 80.vst3' to C:\\Program Files\\Common Files\\VST3." \
+            --target "$GITHUB_SHA" --prerelease
