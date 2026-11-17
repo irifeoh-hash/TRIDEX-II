@@ -42,3 +42,16 @@ CC64 = foot switch (hold, or Trident-style release switch for Auto Damp).
 - Separate per-section outputs (the hardware has them) are not yet exposed as plugin buses.
 
 Trident and Korg are trademarks of Korg Inc. This project is not affiliated with or endorsed by Korg.
+
+## Windows build (cross-compiled from Linux)
+
+A prebuilt Windows zip is produced with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw):
+
+```bash
+git -C ../JUCE apply "$PWD/cmake/juce-8.0.4-mingw.patch"      # two small MinGW fixes to JUCE 8.0.4
+cmake -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DLLVM_MINGW_ROOT=/path/to/llvm-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw-x86_64.cmake
+cmake --build build-win --target Tridex80_VST3 Tridex80_Standalone
+```
+
+Building natively on Windows with Visual Studio needs none of this (see `.github/workflows/build.yml`).
