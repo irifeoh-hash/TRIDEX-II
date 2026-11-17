@@ -26,7 +26,7 @@ juce_add_plugin(Tridex80
     COMPANY_NAME "Tridex Audio"
     PLUGIN_MANUFACTURER_CODE Tdxa
     PLUGIN_CODE Tx80
-    FORMATS VST3 Standalone
+    FORMATS VST3
     PRODUCT_NAME "Tridex 80"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
@@ -45,10 +45,21 @@ target_compile_definitions(Tridex80 PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
-    JUCE_USE_WINDOWS_MEDIA_FORMAT=0)
+    JUCE_USE_WINDOWS_MEDIA_FORMAT=0
+    # Plugin-only build: leave out JUCE features Tridex 80 never uses
+    JUCE_USE_FLAC=0
+    JUCE_USE_OGGVORBIS=0
+    JUCE_USE_MP3AUDIOFORMAT=0
+    JUCE_USE_LAME_AUDIO_FORMAT=0
+    JUCE_USE_CDREADER=0
+    JUCE_USE_CDBURNER=0
+    JUCE_PLUGINHOST_VST3=0
+    JUCE_PLUGINHOST_AU=0
+    JUCE_PLUGINHOST_LADSPA=0
+    JUCE_PLUGINHOST_LV2=0)
 
 target_link_libraries(Tridex80
-    PRIVATE juce::juce_audio_utils juce::juce_dsp
+    PRIVATE juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
 # MinGW cross builds: MSVC's #pragma comment(lib) is ignored, so name the Windows libraries explicitly.
