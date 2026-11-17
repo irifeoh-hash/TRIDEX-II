@@ -15,8 +15,7 @@ constexpr int kModY = 194;               // module names
 constexpr int kSwY = 210;                // switch strip top
 constexpr int kBarY = 272;               // section name bars
 constexpr int kLowerY = 296;             // joystick / arp / keyboard area
-constexpr int kArpX = 314;               // arpeggiator panel (Tridex II)
-constexpr int kKeysX = kArpX + 392;      // keyboard starts here
+constexpr int kKeysX = 312;              // keyboard starts here
 } // namespace
 
 namespace tdxui
@@ -246,6 +245,122 @@ void Joystick::mouseUp (const juce::MouseEvent&)
     pos = {};        // spring return to centre
     jx = 0.0f; jy = 0.0f;
     repaint();
+}
+} // namespace tdxui
+
+//==============================================================================
+namespace tdxui
+{
+ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
+{
+    const int W = 1734 - 48, H = 296 - 40;    // TridexPanel::kW - cheeks, kLowerY - header
+    setSize (W, H);
+    const char* ids[] = { "arp1", "arp2", "arp3" };
+    const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
+    const int pad = 18, gap = 16, cardW = (W - 2 * pad - 2 * gap) / 3, cardY = 34, cardH = 170;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        auto& c = cards[(size_t) i];
+        const juce::String id (ids[i]);
+        c.name = names[i];
+        c.area = { pad + i * (cardW + gap), cardY, cardW, cardH };
+        const int x = c.area.getX(), y = c.area.getY();
+
+        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 18, y + 70, 34, 42 }));
+        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 74,  y + 80, 110, 26 }));
+        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 196, y + 80, 86, 26 }));
+        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 294, y + 80, 56, 26 }));
+        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 362, y + 60, 64, 64 }));
+        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 444, y + 70, 34, 42 }));
+    }
+    tempo = std::unique_ptr<juce::Slider> (&makeKnob ("arp_tempo", { pad, H - 52, 46, 46 }));
+}
+
+juce::Slider& ArpPage::makeKnob (const juce::String& id, juce::Rectangle<int> r)
+{
+    auto* s = new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("white", false);
+    s->getProperties().set ("scale", r.getWidth() >= 60 ? "uni" : "none");
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, this);
+    s->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
+    addAndMakeVisible (*s);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    return *s;
+}
+
+juce::ComboBox& ArpPage::makeCombo (const juce::String& id, juce::Rectangle<int> r)
+{
+    auto* c = new juce::ComboBox();
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
+    {
+        c->addItemList (choice->choices, 1);
+        c->setTooltip (choice->getName (64));
+    }
+    c->setBounds (r);
+    addAndMakeVisible (*c);
+    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, id, *c));
+    return *c;
+}
+
+LedButton& ArpPage::makeLed (const juce::String& id, juce::Rectangle<int> r)
+{
+    auto* b = new LedButton (id);
+    b->setClickingTogglesState (true);
+    b->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
+    addAndMakeVisible (*b);
+    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
+    return *b;
+}
+
+void ArpPage::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    g.setColour (kPanel);
+    g.fillRect (b);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (b, 1.0f);
+
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText ("ARPEGGIATOR", 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText ("ONE PER PART  /  SYNC FOLLOWS THE HOST TEMPO  /  PRESS ARP AGAIN TO CLOSE", 150, 8, 600, 18, juce::Justification::centredLeft);
+
+    for (const auto& c : cards)
+    {
+        const auto r = c.area.toFloat();
+        g.setColour (kPanel2);
+        g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (kInk.withAlpha (0.2f));
+        g.drawRoundedRectangle (r, 6.0f, 1.0f);
+
+        g.setColour (kInk);
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText (c.name, r.withHeight (30).reduced (14, 0), juce::Justification::centredLeft);
+        g.setColour (kInk.withAlpha (0.15f));
+        g.drawHorizontalLine ((int) r.getY() + 30, r.getX() + 10, r.getRight() - 10);
+
+        g.setColour (kInk.withAlpha (0.85f));
+        g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+        const auto lbl = [&] (juce::Component& comp, const juce::String& s)
+        {
+            const auto cb = comp.getBounds().toFloat();
+            g.drawText (s, juce::Rectangle<float> (cb.getX() - 10, cb.getBottom() + 6, cb.getWidth() + 20, 12), juce::Justification::centred);
+        };
+        lbl (*c.on, "ON"); lbl (*c.mode, "MODE"); lbl (*c.rate, "RATE"); lbl (*c.oct, "OCTAVES"); lbl (*c.sync, "SYNC");
+        const auto gb = c.gate->getBounds().toFloat();
+        g.drawText ("GATE", juce::Rectangle<float> (gb.getX(), gb.getBottom() - 2, gb.getWidth(), 12), juce::Justification::centred);
+    }
+
+    g.setColour (kInk.withAlpha (0.85f));
+    g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+    const auto tb = tempo->getBounds();
+    g.drawText ("TEMPO (WHEN SYNC IS OFF)", tb.getRight() + 6, tb.getCentreY() - 6, 200, 12, juce::Justification::centredLeft);
 }
 } // namespace tdxui
 
@@ -534,30 +649,6 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         sectionBar (40, 298, (float) y0 + 188, "JOYSTICK");
     }
 
-    // ---------------- ARPEGGIATOR (Tridex II): one per part, like the Flanger's per-part switches
-    {
-        const int ax = kArpX, y0 = kLowerY + 6;
-        const char* ids[] = { "arp1", "arp2", "arp3" };
-        const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
-        const auto hdr = [&] (int x, int w, const char* s) { text ({ (float) x, (float) y0, (float) w, 10 }, s, 7.5f, true); };
-        hdr (ax + 60, 32, "ON"); hdr (ax + 98, 72, "MODE"); hdr (ax + 174, 70, "RATE");
-        hdr (ax + 248, 50, "OCT"); hdr (ax + 298, 36, "GATE"); hdr (ax + 336, 36, "SYNC");
-        for (int r = 0; r < 3; ++r)
-        {
-            const juce::String id (ids[r]);
-            const int y = y0 + 12 + r * 50;
-            text ({ (float) ax, (float) y + 11, 58, 14 }, names[r], 8.5f, true, juce::Justification::centredLeft);
-            led ((id + "_on").toRawUTF8(), ax + 76, y, "");
-            combo ((id + "_mode").toRawUTF8(), ax + 98, y + 7, 72);
-            combo ((id + "_rate").toRawUTF8(), ax + 174, y + 7, 70);
-            combo ((id + "_oct").toRawUTF8(), ax + 248, y + 7, 50);
-            knob ((id + "_gate").toRawUTF8(), ax + 316, y + 18, "", false, 22);
-            led ((id + "_sync").toRawUTF8(), ax + 354, y, "");
-        }
-        knob ("arp_tempo", ax + 14, y0 + 176, "", false, 22).setTooltip ("Arp tempo (used when SYNC is off)");
-        text ({ (float) ax + 30, (float) y0 + 170, 120, 12 }, "TEMPO (SYNC OFF)", 7.5f, false, juce::Justification::centredLeft);
-        sectionBar ((float) ax + 140, (float) ax + 378, (float) y0 + 178, "ARPEGGIATOR");
-    }
 
     // ---------------- Plugin setup strip (not on the hardware)
     {
@@ -580,6 +671,25 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     }
 
     lcd = { 330, 9, 320, 24 };
+
+    // ---------------- ARP page toggle (Tridex II)
+    arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts);
+    arpPage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*arpPage);
+    {
+        auto b = std::make_unique<tdxui::LedButton> ("ARP");
+        b->setBounds (lcd.getRight() + 14, 4, 30, 32);
+        b->setTooltip ("Show / hide the arpeggiator page");
+        b->onClick = [this]
+        {
+            arpPage->setVisible (! arpPage->isVisible());
+            if (arpPage->isVisible()) arpPage->toFront (false);
+        };
+        addAndMakeVisible (*b);
+        arpBtn = b.get();
+        owned.push_back (std::move (b));
+        text ({ (float) lcd.getRight() + 48, 13, 60, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
+    }
 
     // ---------------- Keyboard (61 keys, C-C)
     keyboard.setAvailableRange (36, 96);
@@ -633,6 +743,7 @@ void TridexPanel::timerCallback()
     for (int i = 0; i < 8; ++i)
         progBtns[(size_t) i]->lit = ! manual && ! writeArmed && cur % 8 == i;
     writeBtn->repaint(); manualBtn->repaint();
+    if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
 

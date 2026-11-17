@@ -81,6 +81,34 @@ private:
     std::atomic<float>& jy;
     juce::Point<float> pos;
 };
+// ARP page: overlays the control section; opened/closed with the ARP button in the top bar.
+class ArpPage : public juce::Component
+{
+public:
+    explicit ArpPage (juce::AudioProcessorValueTreeState& state);
+    void paint (juce::Graphics&) override;
+
+private:
+    struct Card
+    {
+        juce::String name;
+        juce::Rectangle<int> area;
+        std::unique_ptr<LedButton> on, sync;
+        std::unique_ptr<juce::ComboBox> mode, rate, oct;
+        std::unique_ptr<juce::Slider> gate;
+    };
+
+    juce::Slider& makeKnob (const juce::String& id, juce::Rectangle<int> r);
+    juce::ComboBox& makeCombo (const juce::String& id, juce::Rectangle<int> r);
+    LedButton& makeLed (const juce::String& id, juce::Rectangle<int> r);
+
+    juce::AudioProcessorValueTreeState& apvts;
+    std::array<Card, 3> cards;
+    std::unique_ptr<juce::Slider> tempo;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+};
 } // namespace tdxui
 
 //==============================================================================
@@ -124,6 +152,8 @@ private:
 
     tdxui::LedButton* writeBtn = nullptr;
     tdxui::LedButton* manualBtn = nullptr;
+    tdxui::LedButton* arpBtn = nullptr;
+    std::unique_ptr<tdxui::ArpPage> arpPage;
     std::array<tdxui::LedButton*, 4> bankBtns {};
     std::array<tdxui::LedButton*, 8> progBtns {};
     bool writeArmed = false;
