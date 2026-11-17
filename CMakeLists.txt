@@ -21,13 +21,20 @@ else()
     set(TRIDEX_VST3_MANIFEST TRUE)
 endif()
 
+# Plugin formats. The standalone app is only for local UI testing (off by default).
+option(TRIDEX_STANDALONE "Also build the standalone app (local testing only)" OFF)
+set(TRIDEX_FORMATS VST3)
+if(TRIDEX_STANDALONE)
+    list(APPEND TRIDEX_FORMATS Standalone)
+endif()
+
 juce_add_plugin(Tridex80
     VST3_AUTO_MANIFEST ${TRIDEX_VST3_MANIFEST}
     COMPANY_NAME "Tridex Audio"
     PLUGIN_MANUFACTURER_CODE Tdxa
-    PLUGIN_CODE Tx80
-    FORMATS VST3
-    PRODUCT_NAME "Tridex 80"
+    PLUGIN_CODE Tx82
+    FORMATS ${TRIDEX_FORMATS}
+    PRODUCT_NAME "Tridex II"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE

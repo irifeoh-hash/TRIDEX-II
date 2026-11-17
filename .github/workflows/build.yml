@@ -48,14 +48,14 @@ jobs:
         run: |
           mkdir -p dist
           ART=$(find build -type d -path "*Tridex80_artefacts/Release" | head -1)
-          cp -R "$ART/VST3/Tridex 80.vst3" dist/
+          cp -R "$ART/VST3/Tridex II.vst3" dist/
 
       - uses: actions/upload-artifact@v4
         with:
           name: Tridex80-${{ matrix.name }}
           path: dist
 
-      # Windows: publish a ready-to-download zip as the "latest" Release.
+      # Windows: publish a ready-to-download zip as the "tridex-ii-latest" Release.
       - name: Publish Windows download
         if: runner.os == 'Windows' && github.ref == 'refs/heads/main'
         shell: bash
@@ -63,15 +63,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > dist/README.txt <<'TXT'
-          Tridex 80 - Windows 64-bit VST3
+          Tridex II - Windows 64-bit VST3
 
-          1. Copy the whole "Tridex 80.vst3" folder into:
+          1. Copy the whole "Tridex II.vst3" folder into:
                C:\Program Files\Common Files\VST3
           2. Rescan plugins in your DAW (FL Studio: Options > Manage plugins > Find installed plugins).
-             It appears as an instrument: "Tridex Audio - Tridex 80".
+             It appears as an instrument: "Tridex Audio - Tridex II".
           TXT
-          cd dist && 7z a -tzip ../Tridex80-Windows-VST3.zip "Tridex 80.vst3" README.txt && cd ..
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest Tridex80-Windows-VST3.zip --title "Tridex 80 (latest build)" \
-            --notes "Windows 64-bit VST3. Download Tridex80-Windows-VST3.zip below, unzip, copy 'Tridex 80.vst3' to C:\\Program Files\\Common Files\\VST3." \
+          cd dist && 7z a -tzip ../TridexII-Windows-VST3.zip "Tridex II.vst3" README.txt && cd ..
+          gh release delete tridex-ii-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create tridex-ii-latest TridexII-Windows-VST3.zip --title "Tridex II (latest build)" \
+            --notes "Windows 64-bit VST3. Download TridexII-Windows-VST3.zip below, unzip, copy 'Tridex II.vst3' to C:\\Program Files\\Common Files\\VST3." \
             --target "$GITHUB_SHA" --prerelease

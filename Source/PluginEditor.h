@@ -17,6 +17,7 @@ public:
     void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
                            float startAngle, float endAngle, juce::Slider&) override;
     juce::Font getPopupMenuFont() override { return juce::FontOptions (13.0f); }
+    juce::Font getComboBoxFont (juce::ComboBox&) override { return juce::FontOptions (12.0f); }
 };
 
 // Cream push button with a red LED above the cap (as on the hardware switch strips).
@@ -71,7 +72,7 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 1560, kH = 510;
+    static constexpr int kW = 1734, kH = 510;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;
@@ -84,6 +85,7 @@ private:
     juce::Slider& knob (const char* id, int cx, int cy, const juce::String& label, bool white, int size = 38);
     juce::Slider& switchKnob (const char* id, int cx, int cy, const juce::String& label, bool white);
     tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
+    juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,
                juce::Justification j = juce::Justification::centred);
@@ -101,6 +103,7 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> pedalAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
     std::vector<Text> texts;
     std::vector<Bar> bars;
 

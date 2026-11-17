@@ -13,6 +13,7 @@
 //   KLM-401: MG (joystick vibrato / trill, delay vibrato) + flanger (per-section select)
 
 #include "Primitives.h"
+#include "Arp.h"
 
 namespace tdx
 {
@@ -38,6 +39,7 @@ struct Params
     bool synOn = true; Zone synZone = Zone::Both; float synVolume = 0.7f;
     int v1Oct = 1; Vco1Wave v1Wave = Vco1Wave::Saw; float pwInt = 0.3f, pwmSpeed = 1.0f;
     int v2Scale = 2; float v2Detune = 6.0f;            // v2Scale: 0 Off, 1 16', 2 8', 3 4'
+    Vco1Wave v2Wave = Vco1Wave::Saw;                    // VCO2 waveform (shares PW/PWM settings with VCO1)
     float cutoff = 0.6f, res = 0.15f, egInt = 0.3f; int kbdTrack = 2;
     float sfA = 0.01f, sfD = 0.6f, sfS = 0.4f, sfR = 0.4f;
     float saA = 0.005f, saD = 0.5f, saS = 0.8f, saR = 0.4f;
@@ -45,7 +47,9 @@ struct Params
 
     // ---- Brass section
     bool brOn = false; Zone brZone = Zone::Both; float brVolume = 0.6f;
-    bool br16 = false, br8 = true;
+    bool br16 = false, br8 = true;                      // OSC 1 footages
+    int br1Wave = 0;                                    // OSC 1 wave: 0 Saw, 1 Square, 2 Pulse
+    int br2Scale = 0, br2Wave = 0; float br2Detune = 7.0f;   // OSC 2: 0 Off, 1 16', 2 8', 3 4'
     float brCutoff = 0.4f, brRes = 0.1f, brEgInt = 0.5f;
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
@@ -58,6 +62,10 @@ struct Params
     bool bowOn = false; float bowLevel = 0.5f, bowTone = 0.5f;
     bool vibOn = true; float vibDelay = 0.5f, vibIntensity = 0.4f, vibSpeed = 5.5f;
     bool ensembleOn = true;
+
+    // ---- Arpeggiators (one per section: 0 Synth, 1 Brass, 2 Strings)
+    std::array<ArpParams, 3> arp {};
+    float arpTempo = 120.0f;     // used when an arp's SYNC is off
 };
 
 //==============================================================================
@@ -105,7 +113,7 @@ struct Voice
     bool keyDown = false, synGate = false, brGate = false, stGate = false, damped = false;
     float velocity = 1.0f, driftCents = 0.0f, wander = 0.0f, v2Offset = 0.0f;
 
-    DividerVco vco1, vco2;
+    DividerVco vco1, vco2, brVco2;   // brVco2: brass section OSC 2
     Ladder vcf;
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
@@ -135,6 +143,8 @@ public:
             v.vco1.phase = 0.5 * (r.bipolar() + 1.0); v.vco2.phase = 0.5 * (r.bipolar() + 1.0);
             v.vco1.mis8 = r.bipolar() * 0.02f; v.vco1.mis16 = r.bipolar() * 0.02f;
             v.vco2.mis8 = r.bipolar() * 0.02f; v.vco2.mis16 = r.bipolar() * 0.02f;
+            v.brVco2.phase = 0.5 * (r.bipolar() + 1.0);
+            v.brVco2.mis8 = r.bipolar() * 0.02f; v.brVco2.mis16 = r.bipolar() * 0.02f;
         }
         brassVcf.prepare (sr); brassVcf.compensation = 1.0f; brassEnv.prepare (sr);
         stVib.prepare (0.03f, sr);
@@ -142,48 +152,36 @@ public:
         flanger.prepare (sr);
         for (auto* d : { &dcL, &dcR }) *d = {};
         brassHeld = stringsHeld = 0; nextVoice = 0;
-        held.fill (false); sustained.fill (false);
+        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0);
+        for (auto& a : arps) a.clear ([] (int) {});
     }
 
     //--------------------------------------------------------------------------
+    enum : int { kSyn = 1, kBr = 2, kSt = 4, kAll = 7 };
+
+    // A key went down: route it per section, either straight to the voices or to
+    // that section's arpeggiator.
     void noteOn (int note, float vel)
     {
-        const bool sy = p.synOn && inZone (p.synZone, note);
-        const bool br = p.brOn  && inZone (p.brZone, note);
-        const bool st = p.stOn  && inZone (p.stZone, note);
-        if (! (sy || br || st)) return;
+        int mask = 0;
+        if (p.synOn && inZone (p.synZone, note)) mask |= kSyn;
+        if (p.brOn  && inZone (p.brZone, note))  mask |= kBr;
+        if (p.stOn  && inZone (p.stZone, note))  mask |= kSt;
+        if (mask == 0) return;
 
+        if (held[(size_t) note]) releaseKey (note);
         held[(size_t) note] = true; sustained[(size_t) note] = false;
         if (heldCount++ == 0) delayVibEnv = 0.0f;
 
-        // AUTO DAMP: notes no longer held are muted whenever a new note is played.
-        if (p.autoDamp)
-            for (auto& o : voices) if (! o.keyDown && o.aenv.isActive()) o.damped = true;
+        int direct = 0, arped = 0;
+        for (int s = 0; s < 3; ++s)
+            if (mask & (1 << s)) (p.arp[(size_t) s].on ? arped : direct) |= (1 << s);
+        for (int s = 0; s < 3; ++s)
+            if (arped & (1 << s)) arps[(size_t) s].keyOn (note, vel);
 
-        Voice& v = allocate (note);
-        if (v.keyDown) releaseVoice (v, true);           // stolen while held: keep section counters right
-        v.damped = false;
-
-        v.note = note; v.keyDown = true;
-        v.velocity = 1.0f - p.velSens * (1.0f - vel);
-        v.synGate = sy; v.brGate = br; v.stGate = st;
-
-        if (sy) { v.fenv.gateOn(); v.aenv.gateOn(); }
-        if (br)
-        {
-            // TRIGGER: neither switch = single trigger (first note only); MULTIPLE TRIGGER =
-            // every note; TRIGGER SELECT = brass only sounds once SILENCE NOTE keys are held.
-            v.brGateEnv.gate = true;
-            ++brassHeld;
-            const int threshold = brassThreshold();
-            if (brassHeld == threshold || (brassHeld > threshold && p.multiTrig)) brassEnv.gateOn();
-        }
-        if (st)
-        {
-            v.stEnv.gate = true;
-            v.bowEnv.value = 1.0f;                       // bowing transient fires on each new string note
-            if (stringsHeld++ == 0) stVibEnv = 0.0f;
-        }
+        keyMask[(size_t) note] = (uint8_t) direct;
+        arpMask[(size_t) note] = (uint8_t) arped;
+        if (direct) voiceOn (note, vel, direct);
     }
 
     void noteOff (int note)
@@ -192,7 +190,7 @@ public:
         held[(size_t) note] = false;
         heldCount = std::max (0, heldCount - 1);
         if (p.pedalMode == 2 && pedal) { sustained[(size_t) note] = true; return; }
-        for (auto& v : voices) if (v.note == note && v.keyDown) releaseVoice (v, false);
+        releaseKey (note);
     }
 
     void setPedal (bool down)
@@ -200,20 +198,26 @@ public:
         pedal = down;
         if (! down && p.pedalMode == 2)
             for (int n = 0; n < 128; ++n)
-                if (sustained[(size_t) n])
-                {
-                    sustained[(size_t) n] = false;
-                    for (auto& v : voices) if (v.note == n && v.keyDown) releaseVoice (v, false);
-                }
+                if (sustained[(size_t) n]) { sustained[(size_t) n] = false; releaseKey (n); }
     }
 
     void pitchBend (float bipolar) { bend = bipolar; }
     void joystickY (float vibrato01, float trill01) { joyVib = vibrato01; joyTrill = trill01; }
 
+    // Host transport for arp sync: tempo and position (quarter notes) at the start of the block.
+    void setTransport (double bpm, double ppq, bool playing)
+    {
+        hostBpm = bpm > 1.0 ? bpm : 120.0;
+        hostPpq = ppq;
+        hostPlaying = playing;
+    }
+
     void allNotesOff()
     {
-        for (auto& v : voices) if (v.keyDown) releaseVoice (v, false);
-        held.fill (false); sustained.fill (false); heldCount = 0;
+        for (int s = 0; s < 3; ++s) arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
+        for (auto& v : voices) if (v.keyDown) releaseSections (v, kAll, false);
+        held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0);
+        heldCount = 0;
     }
 
     //--------------------------------------------------------------------------
@@ -225,8 +229,29 @@ public:
         const float attenGain = std::pow (10.0f, p.vcaAttenDb / 20.0f);
         const int v1Oct = 2 - std::clamp (p.v1Oct, 0, 2);   // footage index -> divider stage (0 = 4' core)
 
+        const double hostQnPerSample = hostBpm / 60.0 / sr;
+        const double freeQnPerSample = std::max (20.0f, p.arpTempo) / 60.0 / sr;
+
+        // An arp that was switched off releases whatever it was playing.
+        for (int s = 0; s < 3; ++s)
+            if (! p.arp[(size_t) s].on && ! arps[(size_t) s].isIdle())
+                arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
+
         for (int i = 0; i < numSamples; ++i)
         {
+            // ---- Arpeggiators (one per section)
+            for (int s = 0; s < 3; ++s)
+            {
+                const auto& ap = p.arp[(size_t) s];
+                if (! ap.on) continue;
+                const int bit = 1 << s;
+                arps[(size_t) s].tick (ap, ap.sync && hostPlaying, hostPpq,
+                                       ap.sync ? hostQnPerSample : freeQnPerSample,
+                                       [this, bit] (int n, float vel) { voiceOn (n, vel, bit); },
+                                       [this, bit] (int n) { voiceOff (n, bit); });
+            }
+            hostPpq += hostQnPerSample;
+
             // ---- MG / joystick (KLM-401) — modulates all VCOs via the anti-log amp
             mgPhase += p.mgSpeed * invSr; if (mgPhase >= 1.0) mgPhase -= 1.0;
             const float tri = float (mgPhase < 0.5 ? 4.0 * mgPhase - 1.0 : 3.0 - 4.0 * mgPhase);
@@ -262,27 +287,15 @@ public:
                 // ---- Synth (KLM-378)
                 if (v.aenv.isActive())
                 {
-                    float osc1;
-                    const double ph = v1Oct == 0 ? o1.ph4 : (v1Oct == 1 ? o1.ph8 : o1.ph16);
-                    const double dt = v1Oct == 0 ? o1.dt4 : (v1Oct == 1 ? o1.dt8 : o1.dt16);
-                    if (p.v1Wave == Vco1Wave::Saw)
-                        osc1 = v1Oct == 0 ? o1.saw4 : (v1Oct == 1 ? o1.saw8 : o1.saw16);
-                    else if (pw < 0.004f)
-                        osc1 = 0.0f;                              // pulse has collapsed: VCO shut off
-                    else
-                    {
-                        osc1 = ph < pw ? 1.0f : -1.0f;
-                        osc1 += polyBlep (ph, dt);
-                        double t2 = ph - pw; if (t2 < 0.0) t2 += 1.0;
-                        osc1 -= polyBlep (t2, dt);
-                    }
+                    const float osc1 = footageWave (o1, v1Oct, p.v1Wave == Vco1Wave::Saw ? -1.0f : pw);
 
                     float osc2 = 0.0f;
                     if (p.v2Scale > 0)
                     {
                         const float s2 = semis + (p.v2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f;
                         const auto o2 = v.vco2.process (midiToHz (s2) * invSr);
-                        osc2 = p.v2Scale == 1 ? o2.saw16 : (p.v2Scale == 2 ? o2.saw8 : o2.saw4);
+                        const int stage = 3 - p.v2Scale;          // 16' -> 2, 8' -> 1, 4' -> 0
+                        osc2 = footageWave (o2, stage, p.v2Wave == Vco1Wave::Saw ? -1.0f : pw);
                     }
 
                     const float fe = v.fenv.process();
@@ -298,7 +311,15 @@ public:
                 {
                     const float g = v.brGateEnv.process();
                     brassGateOpen = true;
-                    brSum += ((p.br16 ? o1.saw16 : 0.0f) + (p.br8 ? o1.saw8 : 0.0f)) * g * v.velocity;
+                    const float bpw = brassPulseWidth (p.br1Wave);
+                    float b = (p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f);
+                    if (p.br2Scale > 0)
+                    {
+                        const float s2 = semis + (p.br2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f;
+                        const auto ob = v.brVco2.process (midiToHz (s2) * invSr);
+                        b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave));
+                    }
+                    brSum += b * g * v.velocity;
                 }
 
                 // ---- Strings per-voice (KLM-384): KBD balance + AR VCA
@@ -358,6 +379,25 @@ public:
     }
 
 private:
+    // One footage of a divider VCO. stage: 0 = 4', 1 = 8', 2 = 16'.
+    // pw < 0 selects the sawtooth; otherwise a pulse of that width (collapses to silence near 0).
+    static float footageWave (const DividerVco::Out& o, int stage, float pw)
+    {
+        stage = std::clamp (stage, 0, 2);
+        if (pw < 0.0f) return stage == 0 ? o.saw4 : (stage == 1 ? o.saw8 : o.saw16);
+        if (pw < 0.004f) return 0.0f;
+        const double ph = stage == 0 ? o.ph4 : (stage == 1 ? o.ph8 : o.ph16);
+        const double dt = stage == 0 ? o.dt4 : (stage == 1 ? o.dt8 : o.dt16);
+        float out = ph < pw ? 1.0f : -1.0f;
+        out += polyBlep (ph, dt);
+        double t2 = ph - pw; if (t2 < 0.0) t2 += 1.0;
+        out -= polyBlep (t2, dt);
+        return out;
+    }
+
+    // Brass waveforms: Saw, Square (50%), Pulse (25%).
+    static float brassPulseWidth (int wave) { return wave == 1 ? 0.5f : (wave == 2 ? 0.25f : -1.0f); }
+
     bool inZone (Zone z, int note) const
     {
         if (z == Zone::Both) return true;
@@ -394,19 +434,83 @@ private:
 
     Voice& stamp (Voice& v) { v.age = ++ageCounter; return v; }
 
-    void releaseVoice (Voice& v, bool stolen)
+    // A key came up: release its direct sections and take it out of the arps.
+    void releaseKey (int note)
     {
-        v.keyDown = false;
-        if (v.synGate) { v.fenv.gateOff(); v.aenv.gateOff(); }
-        if (v.brGate)
+        const int direct = keyMask[(size_t) note], arped = arpMask[(size_t) note];
+        keyMask[(size_t) note] = arpMask[(size_t) note] = 0;
+        for (int s = 0; s < 3; ++s)
+            if (arped & (1 << s)) arps[(size_t) s].keyOff (note);
+        if (direct) voiceOff (note, direct);
+    }
+
+    // Start a note on the given sections. Sections share the 8 voices, as on the
+    // hardware; a voice already holding this note just gains the extra sections.
+    void voiceOn (int note, float vel, int mask)
+    {
+        if ((mask & kSyn) && p.autoDamp)
+            for (auto& o : voices) if (! o.keyDown && o.aenv.isActive()) o.damped = true;
+
+        Voice* vp = nullptr;
+        for (auto& o : voices) if (o.keyDown && o.note == note) { vp = &o; break; }
+        if (vp == nullptr)
         {
+            vp = &allocate (note);
+            if (vp->keyDown) releaseSections (*vp, kAll, true);   // stolen while held: keep section counters right
+        }
+        Voice& v = *vp;
+        v.note = note; v.keyDown = true;
+        v.velocity = 1.0f - p.velSens * (1.0f - vel);
+
+        // KBD BALANCE filter tracks this note right away (also refreshed every block).
+        const float noteHz = midiToHz ((float) note);
+        const float hz = std::exp2 (std::log2 (18000.0f) + p.kbdBalance * (std::log2 (noteHz * 3.0f) - std::log2 (18000.0f)));
+        v.balLp1.set (hz, sr); v.balLp2.set (hz, sr);
+
+        if (mask & kSyn)
+        {
+            v.damped = false;
+            v.synGate = true;
+            v.fenv.gateOn(); v.aenv.gateOn();
+        }
+        if ((mask & kBr) && ! v.brGate)
+        {
+            // TRIGGER: neither switch = single trigger (first note only); MULTIPLE TRIGGER =
+            // every note; TRIGGER SELECT = brass only sounds once SILENCE NOTE keys are held.
+            v.brGate = true;
+            v.brGateEnv.gate = true;
+            ++brassHeld;
+            const int threshold = brassThreshold();
+            if (brassHeld == threshold || (brassHeld > threshold && p.multiTrig)) brassEnv.gateOn();
+        }
+        if ((mask & kSt) && ! v.stGate)
+        {
+            v.stGate = true;
+            v.stEnv.gate = true;
+            v.bowEnv.value = 1.0f;                       // bowing transient fires on each new string note
+            if (stringsHeld++ == 0) stVibEnv = 0.0f;
+        }
+    }
+
+    void voiceOff (int note, int mask)
+    {
+        for (auto& v : voices)
+            if (v.keyDown && v.note == note) releaseSections (v, mask, false);
+    }
+
+    void releaseSections (Voice& v, int mask, bool stolen)
+    {
+        if ((mask & kSyn) && v.synGate) { v.synGate = false; v.fenv.gateOff(); v.aenv.gateOff(); }
+        if ((mask & kBr) && v.brGate)
+        {
+            v.brGate = false;
             v.brGateEnv.gate = false;
             const bool wasOn = brassHeld >= brassThreshold();
             brassHeld = std::max (0, brassHeld - 1);
             if (wasOn && brassHeld < brassThreshold() && ! stolen) brassEnv.gateOff();
         }
-        if (v.stGate) { v.stEnv.gate = false; stringsHeld = std::max (0, stringsHeld - 1); }
-        v.synGate = v.brGate = v.stGate = false;
+        if ((mask & kSt) && v.stGate) { v.stGate = false; v.stEnv.gate = false; stringsHeld = std::max (0, stringsHeld - 1); }
+        if (! v.synGate && ! v.brGate && ! v.stGate) v.keyDown = false;
     }
 
     void updateCoefficients()
@@ -453,6 +557,10 @@ private:
     Flanger flanger;
 
     std::array<bool, 128> held {}, sustained {};
+    std::array<uint8_t, 128> keyMask {}, arpMask {};   // per held key: sections played directly / via arp
+    std::array<Arp, 3> arps;
+    double hostBpm = 120.0, hostPpq = 0.0;
+    bool hostPlaying = false;
     int heldCount = 0;
     bool pedal = false;
 

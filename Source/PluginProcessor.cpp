@@ -75,6 +75,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "pwm_speed", "PWM Speed", NR (0.1f, 12.0f, 0.0f, 0.5f), 1.0f, "Hz");
     addC (l, "v2_scale",  "VCO2 Octave", { "Off", "16'", "8'", "4'" }, 2);
     addF (l, "v2_detune", "VCO2 Detune", NR (-50.0f, 50.0f), 6.0f, "ct");
+    addC (l, "v2_wave",   "VCO2 Waveform", { "Saw", "PW", "PWM" }, 0);
     addF (l, "cutoff",    "Cutoff Freq", unit, 0.6f);
     addF (l, "res",       "Resonance", unit, 0.15f);
     addF (l, "eg_int",    "EG Intensity", bip, 0.2f);
@@ -96,6 +97,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "br_vol",    "Brass Volume", unit, 0.6f);
     addB (l, "br_16",     "Brass 16'", false);
     addB (l, "br_8",      "Brass 8'", true);
+    addC (l, "br_wave",   "Brass OSC1 Waveform", { "Saw", "Square", "Pulse" }, 0);
+    addC (l, "br2_oct",   "Brass OSC2 Octave", { "Off", "16'", "8'", "4'" }, 0);
+    addC (l, "br2_wave",  "Brass OSC2 Waveform", { "Saw", "Square", "Pulse" }, 0);
+    addF (l, "br2_detune","Brass OSC2 Detune", NR (-50.0f, 50.0f), 7.0f, "ct");
     addF (l, "br_cutoff", "Brass Cutoff Freq", unit, 0.4f);
     addF (l, "br_res",    "Brass Resonance", unit, 0.1f);
     addF (l, "br_egint",  "Brass EG Intensity", unit, 0.5f);
@@ -128,13 +133,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "svib_speed", "Vibrato Speed", NR (1.0f, 10.0f), 5.5f, "Hz");
     addB (l, "ens_off",    "Ensemble Off", false);
 
+    // ---- Arpeggiators (Tridex II addition): one per section
+    addF (l, "arp_tempo", "Arp Tempo", NR (40.0f, 240.0f, 1.0f), 120.0f, "BPM");
+    const char* arpIds[]   = { "arp1", "arp2", "arp3" };
+    const char* arpNames[] = { "Synthe Arp", "Brass Arp", "Strings Arp" };
+    for (int i = 0; i < 3; ++i)
+    {
+        const juce::String id (arpIds[i]), nm (arpNames[i]);
+        addB (l, (id + "_on").toRawUTF8(),   (nm + " On").toRawUTF8(), false);
+        addC (l, (id + "_mode").toRawUTF8(), (nm + " Mode").toRawUTF8(), { "Up", "Down", "Up/Down", "Random", "Played" }, 0);
+        addC (l, (id + "_rate").toRawUTF8(), (nm + " Rate").toRawUTF8(), { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3);
+        addC (l, (id + "_oct").toRawUTF8(),  (nm + " Octaves").toRawUTF8(), { "1", "2", "3", "4" }, 0);
+        addF (l, (id + "_gate").toRawUTF8(), (nm + " Gate").toRawUTF8(), NR (0.05f, 1.0f), 0.5f);
+        addB (l, (id + "_sync").toRawUTF8(), (nm + " Sync").toRawUTF8(), true);
+    }
+
     return l;
 }
 
 const juce::StringArray& TridexProcessor::programmableIds()
 {
     // Items marked * in the spec sheet: VCO1, VCO2, VCF, VCF EG, VCA attenuator, VCA EG, Auto Damp.
-    static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune",
+    static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune", "v2_wave",
                                          "cutoff", "res", "eg_int", "kbd_track",
                                          "sf_a", "sf_d", "sf_s", "sf_r", "sa_a", "sa_d", "sa_s", "sa_r",
                                          "vca_att", "auto_damp" };
@@ -191,14 +211,15 @@ void TridexProcessor::syncParams()
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));
     p.pwInt = get ("pw_int"); p.pwmSpeed = get ("pwm_speed");
-    p.v2Scale = idx ("v2_scale"); p.v2Detune = get ("v2_detune");
+    p.v2Scale = idx ("v2_scale"); p.v2Detune = get ("v2_detune"); p.v2Wave = static_cast<tdx::Vco1Wave> (idx ("v2_wave"));
     p.cutoff = get ("cutoff"); p.res = get ("res"); p.egInt = get ("eg_int"); p.kbdTrack = idx ("kbd_track");
     p.sfA = get ("sf_a"); p.sfD = get ("sf_d"); p.sfS = get ("sf_s"); p.sfR = get ("sf_r");
     p.saA = get ("sa_a"); p.saD = get ("sa_d"); p.saS = get ("sa_s"); p.saR = get ("sa_r");
     p.vcaAttenDb = get ("vca_att"); p.autoDamp = on ("auto_damp");
 
     p.brOn = on ("br_on"); p.brZone = zone ("br_zone"); p.brVolume = get ("br_vol");
-    p.br16 = on ("br_16"); p.br8 = on ("br_8");
+    p.br16 = on ("br_16"); p.br8 = on ("br_8"); p.br1Wave = idx ("br_wave");
+    p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
     p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.silenceNote = idx ("br_silence");
@@ -210,6 +231,20 @@ void TridexProcessor::syncParams()
     p.bowOn = on ("bow_on"); p.bowLevel = get ("bow_level"); p.bowTone = get ("bow_tone");
     p.vibOn = ! on ("svib_off"); p.vibDelay = get ("svib_delay"); p.vibIntensity = get ("svib_int"); p.vibSpeed = get ("svib_speed");
     p.ensembleOn = ! on ("ens_off");
+
+    p.arpTempo = get ("arp_tempo");
+    const char* arpIds[] = { "arp1", "arp2", "arp3" };
+    for (size_t i = 0; i < 3; ++i)
+    {
+        const juce::String id (arpIds[i]);
+        auto& a = p.arp[i];
+        a.on      = on ((id + "_on").toRawUTF8());
+        a.mode    = idx ((id + "_mode").toRawUTF8());
+        a.rate    = idx ((id + "_rate").toRawUTF8());
+        a.octaves = idx ((id + "_oct").toRawUTF8()) + 1;
+        a.gate    = get ((id + "_gate").toRawUTF8());
+        a.sync    = on ((id + "_sync").toRawUTF8());
+    }
 }
 
 void TridexProcessor::handleMidi (const juce::MidiMessage& m)
@@ -239,6 +274,19 @@ void TridexProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     juce::ScopedNoDenormals noDenormals;
     syncParams();
     applyJoystick();
+
+    // Host clock for the arpeggiators.
+    {
+        double bpm = 120.0, ppq = 0.0; bool playing = false;
+        if (auto* ph = getPlayHead())
+            if (auto pos = ph->getPosition())
+            {
+                if (auto b = pos->getBpm()) bpm = *b;
+                if (auto q = pos->getPpqPosition()) ppq = *q;
+                playing = pos->getIsPlaying();
+            }
+        engine.setTransport (bpm, ppq, playing);
+    }
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
     buffer.clear();
 

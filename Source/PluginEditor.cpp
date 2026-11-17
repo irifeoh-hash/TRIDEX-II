@@ -14,7 +14,9 @@ constexpr int kRow1 = 82, kRow2 = 154;   // knob centre rows
 constexpr int kModY = 194;               // module names
 constexpr int kSwY = 210;                // switch strip top
 constexpr int kBarY = 272;               // section name bars
-constexpr int kLowerY = 296;             // joystick / keyboard area
+constexpr int kLowerY = 296;             // joystick / arp / keyboard area
+constexpr int kArpX = 314;               // arpeggiator panel (Tridex II)
+constexpr int kKeysX = kArpX + 392;      // keyboard starts here
 } // namespace
 
 namespace tdxui
@@ -257,6 +259,21 @@ tdxui::LedButton& TridexPanel::progButton (const juce::String& label, int cx, in
     return ref;
 }
 
+juce::ComboBox& TridexPanel::combo (const char* id, int x, int y, int w)
+{
+    auto c = std::make_unique<juce::ComboBox>();
+    auto* choice = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id));
+    jassert (choice != nullptr);
+    c->addItemList (choice->choices, 1);
+    c->setBounds (x, y, w, 22);
+    c->setTooltip (choice->getName (64));
+    addAndMakeVisible (*c);
+    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, id, *c));
+    auto& ref = *c;
+    owned.push_back (std::move (c));
+    return ref;
+}
+
 void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j)
 {
     texts.push_back ({ r, s, size, bold, j });
@@ -324,29 +341,30 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1");
 
         switchKnob ("v2_scale", col (2), kRow1, "OCTAVE", true);
+        switchKnob ("v2_wave", col (3), kRow1, "WAVEFORM", true);
         knob ("v2_detune", col (2), kRow2, "DETUNE", true);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 3 * kCol, kModY, "VCO 2");
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2");
 
-        knob ("cutoff", col (3), kRow1, "CUTOFF FREQ", true);
-        knob ("res", col (4), kRow1, "RESONANCE", true);
-        switchKnob ("kbd_track", col (3), kRow2, "KBD TRACK", true);
-        knob ("eg_int", col (4), kRow2, "EG INTENSITY", true);
-        moduleLabel ((float) s0 + 3 * kCol, (float) s0 + 5 * kCol, kModY, "VCF");
+        knob ("cutoff", col (4), kRow1, "CUTOFF FREQ", true);
+        knob ("res", col (5), kRow1, "RESONANCE", true);
+        switchKnob ("kbd_track", col (4), kRow2, "KBD TRACK", true);
+        knob ("eg_int", col (5), kRow2, "EG INTENSITY", true);
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF");
 
         const char* fe[] = { "sf_a", "sf_d", "sf_s", "sf_r" };
         const char* ae[] = { "sa_a", "sa_d", "sa_s", "sa_r" };
         const char* nm[] = { "ATTACK", "DECAY", "SUSTAIN", "RELEASE" };
         for (int i = 0; i < 4; ++i)
         {
-            knob (fe[i], col (5 + i), kRow1, nm[i], true);
-            knob (ae[i], col (5 + i), kRow2, nm[i], true);
+            knob (fe[i], col (6 + i), kRow1, nm[i], true);
+            knob (ae[i], col (6 + i), kRow2, nm[i], true);
         }
-        text ({ (float) s0 + 5 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true);
-        moduleLabel ((float) s0 + 5 * kCol, (float) s0 + 9 * kCol, kModY, "VCA EG");
+        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true);
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG");
 
-        knob ("vca_att", col (9), kRow1, "ATTENUATOR", true);
-        led ("auto_damp", col (9), kRow2 - 22, "AUTO DAMP");
-        moduleLabel ((float) s0 + 9 * kCol, (float) s0 + 10 * kCol, kModY, "VCA");
+        knob ("vca_att", col (10), kRow1, "ATTENUATOR", true);
+        led ("auto_damp", col (10), kRow2 - 22, "AUTO DAMP");
+        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA");
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
         int bx = s0 + 16;
@@ -361,34 +379,41 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             progBtns[(size_t) i] = &progButton (juce::String (i + 1), bx += 30, kSwY, [this, i] { programPressed (i); });
         text ({ (float) s0 + 80, (float) kSwY + 50, 360, 10 }, "PROGRAMMER", 8.0f, true);
 
-        knob ("syn_vol", s0 + 10 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
-        led ("syn_on", s0 + 10 * kCol - 20, kSwY, "OUTPUT");
-        auto [a, b] = sectionEnd (10);
+        knob ("syn_vol", s0 + 11 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
+        led ("syn_on", s0 + 11 * kCol - 20, kSwY, "OUTPUT");
+        auto [a, b] = sectionEnd (11);
         sectionBar ((float) a, (float) b, kBarY, "SYNTHESIZER");
     }
 
     // ---------------- BRASS
     {
         const int s0 = x;
-        knob ("br_cutoff", col (0), kRow1, "CUTOFF FREQ", false);
-        knob ("br_res", col (1), kRow1, "RESONANCE", false);
-        knob ("br_a", col (2), kRow1, "ATTACK", false);
-        knob ("br_d", col (3), kRow1, "DECAY", false);
-        switchKnob ("br_silence", col (0), kRow2, "SILENCE NOTE", false);
-        knob ("br_egint", col (1), kRow2, "EG INTENSITY", false);
-        knob ("br_s", col (2), kRow2, "SUSTAIN", false);
-        knob ("br_r", col (3), kRow2, "RELEASE", false);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCF");
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "EG");
+        // OSC 1 (footage on the 16'/8' buttons below) and OSC 2
+        switchKnob ("br_wave", col (0), kRow1, "OSC 1 WAVE", false);
+        switchKnob ("br2_oct", col (0), kRow2, "OSC 2 OCTAVE", false);
+        switchKnob ("br2_wave", col (1), kRow1, "OSC 2 WAVE", false);
+        knob ("br2_detune", col (1), kRow2, "DETUNE", false);
+        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "OSCILLATORS");
+
+        knob ("br_cutoff", col (2), kRow1, "CUTOFF FREQ", false);
+        knob ("br_res", col (3), kRow1, "RESONANCE", false);
+        knob ("br_a", col (4), kRow1, "ATTACK", false);
+        knob ("br_d", col (5), kRow1, "DECAY", false);
+        switchKnob ("br_silence", col (2), kRow2, "SILENCE NOTE", false);
+        knob ("br_egint", col (3), kRow2, "EG INTENSITY", false);
+        knob ("br_s", col (4), kRow2, "SUSTAIN", false);
+        knob ("br_r", col (5), kRow2, "RELEASE", false);
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCF");
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "EG");
 
         knob ("br_vol", s0 + 20, kSwY + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
         led ("br_on", bx, kSwY, "OUTPUT");
-        led ("br_16", bx += 38, kSwY, "16'");
-        led ("br_8", bx += 34, kSwY, "8'");
-        led ("br_multi", bx += 40, kSwY, "MULTIPLE TRIGGER");
-        led ("br_tsel", bx += 38, kSwY, "TRIGGER SELECT");
-        auto [a, b] = sectionEnd (4);
+        led ("br_16", bx += 40, kSwY, "OSC 1 16'");
+        led ("br_8", bx += 38, kSwY, "OSC 1 8'");
+        led ("br_multi", bx += 46, kSwY, "MULTIPLE TRIGGER");
+        led ("br_tsel", bx += 42, kSwY, "TRIGGER SELECT");
+        auto [a, b] = sectionEnd (6);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
     }
 
@@ -448,6 +473,31 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         sectionBar (40, 298, (float) y0 + 188, "JOYSTICK");
     }
 
+    // ---------------- ARPEGGIATOR (Tridex II): one per part, like the Flanger's per-part switches
+    {
+        const int ax = kArpX, y0 = kLowerY + 6;
+        const char* ids[] = { "arp1", "arp2", "arp3" };
+        const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
+        const auto hdr = [&] (int x, int w, const char* s) { text ({ (float) x, (float) y0, (float) w, 10 }, s, 7.5f, true); };
+        hdr (ax + 60, 32, "ON"); hdr (ax + 98, 72, "MODE"); hdr (ax + 174, 70, "RATE");
+        hdr (ax + 248, 50, "OCT"); hdr (ax + 298, 36, "GATE"); hdr (ax + 336, 36, "SYNC");
+        for (int r = 0; r < 3; ++r)
+        {
+            const juce::String id (ids[r]);
+            const int y = y0 + 12 + r * 50;
+            text ({ (float) ax, (float) y + 11, 58, 14 }, names[r], 8.5f, true, juce::Justification::centredLeft);
+            led ((id + "_on").toRawUTF8(), ax + 76, y, "");
+            combo ((id + "_mode").toRawUTF8(), ax + 98, y + 7, 72);
+            combo ((id + "_rate").toRawUTF8(), ax + 174, y + 7, 70);
+            combo ((id + "_oct").toRawUTF8(), ax + 248, y + 7, 50);
+            knob ((id + "_gate").toRawUTF8(), ax + 316, y + 18, "", false, 22);
+            led ((id + "_sync").toRawUTF8(), ax + 354, y, "");
+        }
+        knob ("arp_tempo", ax + 14, y0 + 176, "", false, 22).setTooltip ("Arp tempo (used when SYNC is off)");
+        text ({ (float) ax + 30, (float) y0 + 170, 120, 12 }, "TEMPO (SYNC OFF)", 7.5f, false, juce::Justification::centredLeft);
+        sectionBar ((float) ax + 140, (float) ax + 378, (float) y0 + 178, "ARPEGGIATOR");
+    }
+
     // ---------------- Plugin setup strip (not on the hardware)
     {
         const int y = 22;
@@ -473,7 +523,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     // ---------------- Keyboard (61 keys, C-C)
     keyboard.setAvailableRange (36, 96);
     keyboard.setLowestVisibleKey (36);
-    keyboard.setBounds (312, kLowerY + 6, kW - 312 - 30, kH - kLowerY - 12);
+    keyboard.setBounds (kKeysX + 2, kLowerY + 6, kW - kKeysX - 32, kH - kLowerY - 12);
     keyboard.setKeyWidth ((float) keyboard.getWidth() / 36.0f);
     keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, kLedOn.withAlpha (0.45f));
     keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha (0.35f));
@@ -541,14 +591,14 @@ void TridexPanel::paint (juce::Graphics& g)
     g.setColour (kPanel);
     g.fillRect (24, 0, kW - 48, kLowerY);
     g.setColour (kPanel2);
-    g.fillRect (24, kLowerY, 286, kH - kLowerY);
+    g.fillRect (24, kLowerY, kKeysX - 24, kH - kLowerY);
     g.setColour (juce::Colours::black);
-    g.fillRect (310, kLowerY, kW - 310 - 24, kH - kLowerY);
+    g.fillRect (kKeysX, kLowerY, kW - kKeysX - 24, kH - kLowerY);
 
     // Header: original wordmark + program display
     g.setColour (kInk);
     g.setFont (juce::FontOptions (22.0f, juce::Font::bold).withHorizontalScale (1.15f));
-    g.drawText ("TRIDEX 80", 36, 6, 200, 30, juce::Justification::centredLeft);
+    g.drawText ("TRIDEX II", 36, 6, 200, 30, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (9.0f));
     g.setColour (kInk.withAlpha (0.6f));
     g.drawText ("PERFORMING KEYBOARD", 176, 14, 140, 14, juce::Justification::centredLeft);

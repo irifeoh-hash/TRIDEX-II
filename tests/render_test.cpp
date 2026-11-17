@@ -40,11 +40,14 @@ int main (int argc, char** argv)
     const char* out = argc > 1 ? argv[1] : ".";
     int fails = 0;
     tdx::Params synth; fails += render ("polysynth", synth, out);
-    tdx::Params pwm;   pwm.v1Wave = tdx::Vco1Wave::PWM; pwm.pwInt = 0.8f; pwm.v2Scale = 0; fails += render ("pwm", pwm, out);
-    tdx::Params brass; brass.synOn = false; brass.brOn = true; brass.br16 = true; fails += render ("brass", brass, out);
+    tdx::Params pwm;   pwm.v1Wave = tdx::Vco1Wave::PWM; pwm.pwInt = 0.8f; pwm.v2Scale = 3; pwm.v2Wave = tdx::Vco1Wave::PW; fails += render ("pwm", pwm, out);
+    tdx::Params brass; brass.synOn = false; brass.brOn = true; brass.br16 = true; brass.br1Wave = 2; brass.br2Scale = 2; brass.br2Wave = 1; brass.br2Detune = 12.0f; fails += render ("brass", brass, out);
     tdx::Params str;   str.synOn = false; str.stOn = true; str.kbdBalance = 0.7f; str.bowOn = true; fails += render ("strings", str, out);
     tdx::Params all;   all.brOn = all.stOn = true; all.res = 0.95f; all.master = 1.0f;
     all.flSynth = all.flStrings = true; all.flFeedback = 0.9f; all.autoDamp = true; all.assignMode = 1; all.trigSelect = true; all.silenceNote = 1; fails += render ("all_hot", all, out);
+    // Arpeggiators: synth arp free-running, strings arp synced to a (stopped) host at 100 BPM.
+    tdx::Params arp; arp.stOn = true; arp.arp[0].on = true; arp.arp[0].mode = 2; arp.arp[0].octaves = 2;
+    arp.arp[2].on = true; arp.arp[2].rate = 1; arp.arp[2].mode = 3; fails += render ("arps", arp, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }
