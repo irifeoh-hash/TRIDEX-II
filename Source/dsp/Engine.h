@@ -53,6 +53,7 @@ struct Params
     float brCutoff = 0.4f, brRes = 0.1f, brEgInt = 0.5f;
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
+    bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
 
     // ---- Strings section
     bool stOn = false; Zone stZone = Zone::Both; float stVolume = 0.6f;
@@ -117,6 +118,7 @@ struct Voice
     Ladder vcf;
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
+    bool brCut = false;          // brass gate being cut quickly (mono note change)
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
 
     bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || stEnv.isActive(); }
@@ -215,6 +217,7 @@ public:
     void allNotesOff()
     {
         for (int s = 0; s < 3; ++s) arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
+        monoCurrent = -1; monoCount = 0;
         for (auto& v : voices) if (v.keyDown) releaseSections (v, kAll, false);
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0);
         heldCount = 0;
@@ -231,6 +234,10 @@ public:
 
         const double hostQnPerSample = hostBpm / 60.0 / sr;
         const double freeQnPerSample = std::max (20.0f, p.arpTempo) / 60.0 / sr;
+
+        // Leaving MONO releases the mono brass note (keys are re-read on the next press).
+        if (lastBrMono && ! p.brMono) monoReset();
+        lastBrMono = p.brMono;
 
         // An arp that was switched off releases whatever it was playing.
         for (int s = 0; s < 3; ++s)
@@ -434,6 +441,79 @@ private:
 
     Voice& stamp (Voice& v) { v.age = ++ageCounter; return v; }
 
+    // Section note entry points: brass is diverted through the mono handler when MONO is on.
+    void voiceOn (int note, float vel, int mask)
+    {
+        if ((mask & kBr) && p.brMono) { brassMonoOn (note, vel); mask &= ~kBr; }
+        if (mask) voiceOnRaw (note, vel, mask);
+    }
+
+    void voiceOff (int note, int mask)
+    {
+        if ((mask & kBr) && p.brMono) { brassMonoOff (note); mask &= ~kBr; }
+        if (mask) voiceOffRaw (note, mask);
+    }
+
+    // ---- Monophonic brass: one note at a time, last-note priority.
+    void brassMonoOn (int note, float vel)
+    {
+        monoRemove (note);
+        if (monoCount < (int) monoStack.size()) { monoStack[(size_t) monoCount] = note; monoVel[(size_t) monoCount] = vel; ++monoCount; }
+        monoSwitchTo (note, vel);
+    }
+
+    void brassMonoOff (int note)
+    {
+        monoRemove (note);
+        if (note != monoCurrent) { voiceOffRaw (note, kBr); return; }   // e.g. held from before MONO was switched on
+        if (monoCount > 0) monoSwitchTo (monoStack[(size_t) monoCount - 1], monoVel[(size_t) monoCount - 1]);
+        else { voiceOffRaw (monoCurrent, kBr); monoCurrent = -1; }
+    }
+
+    void monoSwitchTo (int note, float vel)
+    {
+        if (monoCurrent >= 0 && monoCurrent != note)
+        {
+            // Cut the old brass note quickly. With MULTIPLE TRIGGER off the change is
+            // legato: the shared brass EG carries on instead of restarting.
+            for (auto& v : voices)
+                if (v.keyDown && v.note == monoCurrent && v.brGate)
+                {
+                    v.brGate = false;
+                    v.brGateEnv.gate = false;
+                    v.brCut = true;
+                    v.brGateEnv.set (0.002f, 0.006f, sr);
+                    if (! v.synGate && ! v.stGate) v.keyDown = false;
+                    brassHeld = std::max (0, brassHeld - 1);
+                }
+            suppressBrassTrigger = ! p.multiTrig && brassHeld + 1 >= brassThreshold();
+            voiceOnRaw (note, vel, kBr);
+            suppressBrassTrigger = false;
+        }
+        else if (monoCurrent != note)
+            voiceOnRaw (note, vel, kBr);
+        else if (p.multiTrig)
+            brassEnv.gateOn();   // same note again (e.g. arp repeat): retrigger if Multiple Trigger is on
+        monoCurrent = note;
+    }
+
+    void monoRemove (int note)
+    {
+        for (int i = 0; i < monoCount; ++i)
+            if (monoStack[(size_t) i] == note)
+            {
+                for (int j = i; j < monoCount - 1; ++j) { monoStack[(size_t) j] = monoStack[(size_t) j + 1]; monoVel[(size_t) j] = monoVel[(size_t) j + 1]; }
+                --monoCount;
+                return;
+            }
+    }
+
+    void monoReset()
+    {
+        if (monoCurrent >= 0) voiceOffRaw (monoCurrent, kBr);
+        monoCurrent = -1; monoCount = 0;
+    }
+
     // A key came up: release its direct sections and take it out of the arps.
     void releaseKey (int note)
     {
@@ -446,7 +526,7 @@ private:
 
     // Start a note on the given sections. Sections share the 8 voices, as on the
     // hardware; a voice already holding this note just gains the extra sections.
-    void voiceOn (int note, float vel, int mask)
+    void voiceOnRaw (int note, float vel, int mask)
     {
         if ((mask & kSyn) && p.autoDamp)
             for (auto& o : voices) if (! o.keyDown && o.aenv.isActive()) o.damped = true;
@@ -475,13 +555,14 @@ private:
         }
         if ((mask & kBr) && ! v.brGate)
         {
+            v.brCut = false;
             // TRIGGER: neither switch = single trigger (first note only); MULTIPLE TRIGGER =
             // every note; TRIGGER SELECT = brass only sounds once SILENCE NOTE keys are held.
             v.brGate = true;
             v.brGateEnv.gate = true;
             ++brassHeld;
             const int threshold = brassThreshold();
-            if (brassHeld == threshold || (brassHeld > threshold && p.multiTrig)) brassEnv.gateOn();
+            if (! suppressBrassTrigger && (brassHeld == threshold || (brassHeld > threshold && p.multiTrig))) brassEnv.gateOn();
         }
         if ((mask & kSt) && ! v.stGate)
         {
@@ -492,7 +573,7 @@ private:
         }
     }
 
-    void voiceOff (int note, int mask)
+    void voiceOffRaw (int note, int mask)
     {
         for (auto& v : voices)
             if (v.keyDown && v.note == note) releaseSections (v, mask, false);
@@ -529,7 +610,8 @@ private:
                 const float hz = std::exp2 (std::log2 (18000.0f) + p.kbdBalance * (std::log2 (noteHz * 3.0f) - std::log2 (18000.0f)));
                 v.balLp1.set (hz, sr); v.balLp2.set (hz, sr);
             }
-            v.brGateEnv.set (0.002f, std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
+            if (v.brCut && ! v.brGateEnv.isActive()) v.brCut = false;
+            v.brGateEnv.set (0.002f, v.brCut ? 0.006f : std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
             v.stEnv.set (p.stAttack, p.stRelease, sr);
         }
         brassEnv.set (p.brA, p.brD, p.brS, p.brR);
@@ -548,6 +630,10 @@ private:
     Ladder brassVcf;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;
+    std::array<int, 128> monoStack {};
+    std::array<float, 128> monoVel {};
+    int monoCount = 0, monoCurrent = -1;
+    bool suppressBrassTrigger = false, lastBrMono = false;
 
     DelayLine stVib;
     double stVibPhase = 0.0;

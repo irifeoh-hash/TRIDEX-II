@@ -48,6 +48,8 @@ int main (int argc, char** argv)
     // Arpeggiators: synth arp free-running, strings arp synced to a (stopped) host at 100 BPM.
     tdx::Params arp; arp.stOn = true; arp.arp[0].on = true; arp.arp[0].mode = 2; arp.arp[0].octaves = 2;
     arp.arp[2].on = true; arp.arp[2].rate = 1; arp.arp[2].mode = 3; fails += render ("arps", arp, out);
+    tdx::Params mono; mono.synOn = false; mono.brOn = true; mono.brMono = true; mono.multiTrig = false;
+    fails += render ("brass_mono", mono, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

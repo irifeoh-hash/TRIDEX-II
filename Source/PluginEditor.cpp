@@ -413,6 +413,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("br_8", bx += 38, kSwY, "OSC 1 8'");
         led ("br_multi", bx += 46, kSwY, "MULTIPLE TRIGGER");
         led ("br_tsel", bx += 42, kSwY, "TRIGGER SELECT");
+        led ("br_mono", bx += 42, kSwY, "MONO");
         auto [a, b] = sectionEnd (6);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
     }

@@ -110,6 +110,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "br_r", "Brass Release", timeRange (15.0f), 0.3f,  "s");
     addB (l, "br_multi",  "Multiple Trigger", false);
     addB (l, "br_tsel",   "Trigger Select", false);
+    addB (l, "br_mono",   "Brass Mono", false);
     addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
 
     // ---- Strings section
@@ -222,7 +223,7 @@ void TridexProcessor::syncParams()
     p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
-    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.silenceNote = idx ("br_silence");
+    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.silenceNote = idx ("br_silence");
 
     p.stOn = on ("st_on"); p.stZone = zone ("st_zone"); p.stVolume = get ("st_vol");
     p.st16 = on ("st_16"); p.st8 = on ("st_8"); p.st4 = on ("st_4");
