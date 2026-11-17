@@ -61,6 +61,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     // ---- Plugin extras (not on the hardware panel)
     addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // hardware: fixed, lower 2 / upper 3 octaves
     addF (l, "bend_range", "Bend Range", NR (0.0f, 12.0f, 1.0f), 2.0f, "st");
+    addF (l, "transpose",  "Transpose", NR (-12.0f, 12.0f, 1.0f), 0.0f, "st");
     addF (l, "drift",      "Analog Drift", unit, 0.3f);
     addF (l, "vel_sens",   "Velocity Sens", unit, 0.0f);
     addC (l, "pedal_mode", "Pedal Mode", { "Off", "Damper (S-1)", "Hold" }, 2);
@@ -206,7 +207,7 @@ void TridexProcessor::syncParams()
     p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int");
     p.flSynth = on ("fl_syn"); p.flBrass = on ("fl_br"); p.flStrings = on ("fl_st");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
-    p.splitPoint = idx ("split"); p.bendRange = get ("bend_range"); p.drift = get ("drift");
+    p.splitPoint = idx ("split"); p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose")); p.drift = get ("drift");
     p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode");
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");

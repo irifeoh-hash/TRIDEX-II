@@ -154,6 +154,58 @@ void SplitSelector::mouseDown (const juce::MouseEvent& e)
 }
 
 //==============================================================================
+TransposeControl::TransposeControl (juce::RangedAudioParameter& p)
+    : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); })
+{
+    attachment.sendInitialUpdate();
+}
+
+void TransposeControl::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    const float bw = b.getHeight();
+    const auto drawBtn = [&] (juce::Rectangle<float> r, const juce::String& s)
+    {
+        g.setColour (juce::Colours::black);
+        g.fillRoundedRectangle (r.reduced (1.0f), 3.0f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe9e4d6), r.getX(), r.getY(),
+                                                 juce::Colour (0xffb9b4a6), r.getX(), r.getBottom(), false));
+        g.fillRoundedRectangle (r.reduced (2.5f), 2.5f);
+        g.setColour (juce::Colour (0xff141414));
+        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        g.drawText (s, r, juce::Justification::centred);
+    };
+    drawBtn (b.withWidth (bw), "-");
+    drawBtn (b.withTrimmedLeft (b.getWidth() - bw), "+");
+
+    const auto lcdR = b.reduced (bw + 4.0f, 2.0f);
+    g.setColour (juce::Colour (0xff1d0705));
+    g.fillRoundedRectangle (lcdR, 3.0f);
+    g.setColour (value == 0 ? kLedOn.withAlpha (0.55f) : kLedOn);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 14.0f, juce::Font::bold));
+    g.drawText (value > 0 ? "+" + juce::String (value) : juce::String (value), lcdR, juce::Justification::centred);
+}
+
+void TransposeControl::step (int delta)
+{
+    const int v = juce::jlimit (-12, 12, value + delta);
+    if (v != value) attachment.setValueAsCompleteGesture ((float) v);
+}
+
+void TransposeControl::mouseDown (const juce::MouseEvent& e)
+{
+    const int bw = getHeight();
+    if (e.x < bw) step (-1);
+    else if (e.x > getWidth() - bw) step (+1);
+}
+
+void TransposeControl::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    const int bw = getHeight();
+    if (e.x >= bw && e.x <= getWidth() - bw) attachment.setValueAsCompleteGesture (0.0f);
+}
+
+//==============================================================================
 void Joystick::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (2.0f);
@@ -468,7 +520,15 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         knob ("mg_int", 70, y0 + 136, "INTENSITY", false);
         knob ("mg_speed", 128, y0 + 136, "SPEED", false);
         auto js = std::make_unique<tdxui::Joystick> (proc.guiJoyX, proc.guiJoyY);
-        js->setBounds (170, y0 + 2, 128, 176);
+        js->setBounds (170, y0 + 40, 128, 138);
+
+        // TRANSPOSE (Tridex II), above the joystick
+        auto tr = std::make_unique<tdxui::TransposeControl> (*proc.apvts.getParameter ("transpose"));
+        tr->setBounds (176, y0 + 14, 116, 24);
+        tr->setTooltip ("Transpose -12..+12 semitones (double-click the value to reset)");
+        addAndMakeVisible (*tr);
+        owned.push_back (std::move (tr));
+        text ({ 176.0f, (float) y0 + 1, 116.0f, 11 }, "TRANSPOSE", 8.0f, true);
         addAndMakeVisible (*js);
         owned.push_back (std::move (js));
         sectionBar (40, 298, (float) y0 + 188, "JOYSTICK");

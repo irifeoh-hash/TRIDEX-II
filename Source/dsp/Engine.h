@@ -30,6 +30,7 @@ struct Params
     float mgSpeed = 5.5f, mgIntensity = 0.5f;           // joystick vibrato/trill
     bool delayVib = false; float delayVibInt = 0.3f;     // delay time is fixed on the hardware
     float bendRange = 2.0f;
+    int transpose = 0;                                  // Tridex II: -12..+12 semitones (split stays on the physical keys)
     bool flSynth = false, flBrass = false, flStrings = false;
     float flManual = 0.4f, flIntensity = 0.5f, flFeedback = 0.4f, flSpeed = 0.3f;
     float drift = 0.3f, velSens = 0.0f;
@@ -268,7 +269,7 @@ public:
             const float jv = p.delayVib ? 0.0f : joyVib, jt = p.delayVib ? 0.0f : joyTrill;
             const float vibSemis = tri * (jv * p.mgIntensity + (p.delayVib ? delayVibEnv * p.delayVibInt * 0.6f : 0.0f));
             const float trillSemis = trillSq * jt * p.mgIntensity * 2.0f;
-            const float globalSemis = p.tuneCents * 0.01f + bend * p.bendRange + vibSemis + trillSemis;
+            const float globalSemis = p.tuneCents * 0.01f + (float) p.transpose + bend * p.bendRange + vibSemis + trillSemis;
 
             pwmPhase += p.pwmSpeed * invSr; if (pwmPhase >= 1.0) pwmPhase -= 1.0;
             const float pwmTri = float (pwmPhase < 0.5 ? 4.0 * pwmPhase - 1.0 : 3.0 - 4.0 * pwmPhase);

@@ -51,6 +51,21 @@ private:
     int zone = 1; // 0 L, 1 L+H, 2 H
 };
 
+// TRANSPOSE: - / + buttons with the current value (-12..+12). Double-click the value to reset.
+class TransposeControl : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    TransposeControl (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+private:
+    void step (int delta);
+    juce::ParameterAttachment attachment;
+    int value = 0;
+};
+
 // Spring-loaded joystick: X = pitch bend, Y+ = vibrato, Y- = trill.
 class Joystick : public juce::Component, public juce::SettableTooltipClient
 {
