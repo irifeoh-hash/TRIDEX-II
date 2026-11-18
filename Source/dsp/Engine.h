@@ -58,7 +58,8 @@ struct Params
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
-    bool synMono = false;                               // Tridex II: monophonic synth (last-note priority, legato)
+    bool synMono = false;                               // Tridex II: monophonic synth (legato)
+    int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
     float synGlide = 0.0f, brGlide = 0.0f;              // Tridex II: glide time in seconds (0 = off)
     bool synGliss = false, brGliss = false;             // false = portamento (smooth), true = glissando (semitone steps)
@@ -601,18 +602,31 @@ private:
     // ---- Monophonic brass: one note at a time, last-note priority.
     // ---- Monophonic synth: one note at a time, last-note priority; legato when notes overlap
     // (the new note picks up the envelopes where the old one was, so nothing restarts).
+    // Index of the held note that should sound, by NOTE PRIORITY (Last / First / Low / High).
+    int pickByPriority (const std::array<int, 128>& stack, int count) const
+    {
+        if (count <= 0) return -1;
+        int k = count - 1;                                         // Last
+        if (p.notePriority == 1) k = 0;                            // First
+        else if (p.notePriority == 2 || p.notePriority == 3)       // Low / High
+            for (int i = 0; i < count; ++i)
+                if (p.notePriority == 2 ? stack[(size_t) i] < stack[(size_t) k] : stack[(size_t) i] > stack[(size_t) k]) k = i;
+        return k;
+    }
+
     void synthMonoOn (int note, float vel)
     {
         sRemove (note);
         if (sCount < (int) sStack.size()) { sStack[(size_t) sCount] = note; sVel[(size_t) sCount] = vel; ++sCount; }
-        synthMonoSwitchTo (note, vel);
+        const int k = pickByPriority (sStack, sCount);
+        if (k >= 0) synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k]);
     }
 
     void synthMonoOff (int note)
     {
         sRemove (note);
         if (note != sCurrent) { voiceOffRaw (note, kSyn); return; }
-        if (sCount > 0) synthMonoSwitchTo (sStack[(size_t) sCount - 1], sVel[(size_t) sCount - 1]);
+        if (sCount > 0) { const int k = pickByPriority (sStack, sCount); synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k]); }
         else { voiceOffRaw (sCurrent, kSyn); sCurrent = -1; }
     }
 
@@ -663,14 +677,15 @@ private:
     {
         monoRemove (note);
         if (monoCount < (int) monoStack.size()) { monoStack[(size_t) monoCount] = note; monoVel[(size_t) monoCount] = vel; ++monoCount; }
-        monoSwitchTo (note, vel);
+        const int k = pickByPriority (monoStack, monoCount);
+        if (k >= 0) monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k]);
     }
 
     void brassMonoOff (int note)
     {
         monoRemove (note);
         if (note != monoCurrent) { voiceOffRaw (note, kBr); return; }   // e.g. held from before MONO was switched on
-        if (monoCount > 0) monoSwitchTo (monoStack[(size_t) monoCount - 1], monoVel[(size_t) monoCount - 1]);
+        if (monoCount > 0) { const int k = pickByPriority (monoStack, monoCount); monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k]); }
         else { voiceOffRaw (monoCurrent, kBr); monoCurrent = -1; }
     }
 

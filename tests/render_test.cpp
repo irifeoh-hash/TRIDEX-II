@@ -61,6 +61,7 @@ int main (int argc, char** argv)
     tdx::Params gl; gl.brOn = true; gl.synGlide = 0.3f; gl.brGlide = 0.5f; gl.brGliss = true; gl.brMono = true;
     fails += render ("glide", gl, out);
     tdx::Params sm; sm.synMono = true; sm.synGlide = 0.2f; fails += render ("synth_mono", sm, out);
+    tdx::Params np; np.synMono = true; np.brOn = true; np.brMono = true; np.notePriority = 3; fails += render ("prio_high", np, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

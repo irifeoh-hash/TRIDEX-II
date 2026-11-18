@@ -1067,6 +1067,13 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         pedalBox.setBounds (sx - 10, 10, 118, 22);
         addAndMakeVisible (pedalBox);
         pedalAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "pedal_mode", pedalBox);
+
+        // Tridex II: note priority for Synth / Brass MONO
+        prioBox.addItemList ({ "Priority: Last", "Priority: First", "Priority: Low", "Priority: High" }, 1);
+        prioBox.setBounds (kW - 590, 10, 128, 22);
+        prioBox.setTooltip ("Note priority for Synth and Brass MONO");
+        addAndMakeVisible (prioBox);
+        prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
     }
 
     lcd = { 330, 9, 320, 24 };

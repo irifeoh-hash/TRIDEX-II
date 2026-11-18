@@ -247,7 +247,8 @@ private:
     juce::Rectangle<int> lcd;
     juce::String lcdText;
 
-    juce::ComboBox pedalBox;
+    juce::ComboBox pedalBox, prioBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> prioAtt;
     juce::MidiKeyboardComponent keyboard { proc.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard };
 };
 
