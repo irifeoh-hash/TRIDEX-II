@@ -143,6 +143,7 @@ struct Voice
     Ladder brVcf;                // Tridex II: per-note brass filter (POLY VCF mode)
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
+    float bowSmooth = 0.0f;      // bow accent, slewed so a retrigger on a sounding note can't click
     Adsr brEnv;                  // per-note brass EG (POLY voicing)
     bool brCut = false;          // brass gate being cut quickly (mono note change)
     int pitchNote = -1;          // note the oscillators are actually playing
@@ -275,6 +276,7 @@ public:
         const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
+        const float bowSlew = 1.0f - std::exp (-1.0f / (0.003f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const int stringFeet = std::max (1, (p.st16 ? 1 : 0) + (p.st8 ? 1 : 0) + (p.st4 ? 1 : 0));
         const float stMixNorm = 1.0f / std::sqrt ((float) stringFeet);
@@ -381,7 +383,7 @@ public:
                 {
                     const float g = v.brGateEnv.process();
                     brassGateOpen = true;
-                    brWeight += g;
+                    brWeight += g * fg;
                     const float bpw = brassPulseWidth (p.br1Wave);
                     float b = (p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f);
                     if (p.br2Scale > 0)
@@ -416,10 +418,11 @@ public:
                 {
                     const float e = v.stEnv.process();
                     const float raw = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * stMixNorm;
-                    stWeight += e;
+                    stWeight += e * fg;
                     const float sig = v.balLp2.process (v.balLp1.process (raw));
                     stSum += sig * e * vg;
-                    if (p.bowOn) bowSum += sig * v.bowEnv.value * e * fg;
+                    v.bowSmooth += (v.bowEnv.value - v.bowSmooth) * bowSlew;
+                    if (p.bowOn) bowSum += sig * v.bowSmooth * e * fg;
                     v.bowEnv.value *= bowDecay;
                 }
             }
@@ -452,15 +455,23 @@ public:
             // Voice-count compensation (1/sqrt(notes sounding), following the envelopes) keeps chords
             // from piling up into the ensemble and filter; makeup gain comes after (kStTrim).
             float s = stSum * 0.22f / std::sqrt (std::max (1.0f, stWeight));
-            if (p.vibOn)
+            // Vibrato and ensemble always run and are crossfaded (~10 ms), so VIBRATO OFF /
+            // ENSEMBLE OFF don't click.
             {
                 stVibPhase += p.vibSpeed * invSr; if (stVibPhase >= 1.0) stVibPhase -= 1.0;
                 const float mod = std::sin (kTwoPi * (float) stVibPhase) * p.vibIntensity * stVibEnv;
                 stVib.push (s);
-                s = stVib.read ((2.0f + 1.6f * mod) * 0.001f * sr);
+                const float vib = stVib.read ((2.0f + 1.6f * mod) * 0.001f * sr);
+                vibMix += ((p.vibOn ? 1.0f : 0.0f) - vibMix) * sendSmooth;
+                s += (vib - s) * vibMix;
             }
             float sL = s, sR = s;
-            if (p.ensembleOn) ensemble.process (s, 1.0f, sL, sR);
+            {
+                float eL, eR;
+                ensemble.process (s, 1.0f, eL, eR);
+                ensMix += ((p.ensembleOn ? 1.0f : 0.0f) - ensMix) * sendSmooth;
+                sL += (eL - sL) * ensMix; sR += (eR - sR) * ensMix;
+            }
             if (p.bowOn)
             {
                 const float b = bowBp.process (bowSum * 0.22f) * p.bowLevel * 2.0f;
@@ -965,7 +976,7 @@ private:
             }
             if (v.brCut && ! v.brGateEnv.isActive()) v.brCut = false;
             v.brGateEnv.set (0.008f, v.brCut ? 0.010f : std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
-            v.stEnv.set (p.stAttack, p.stRelease, sr);
+            v.stEnv.set (std::max (p.stAttack, 0.004f), std::max (p.stRelease, 0.006f), sr);   // no snapping
         }
         brassEnv.set (p.brA, p.brD, p.brS, p.brR);
         for (auto& v : voices) v.brEnv.set (p.brA, p.brD, p.brS, p.brR);
@@ -1011,6 +1022,7 @@ private:
     double hostBpm = 120.0, hostPpq = 0.0;
     std::array<double, 3> gateFreeQn {};
     std::array<float, 3> chSend {}, flSend {};   // crossfaded effect sends per section
+    float vibMix = 1.0f, ensMix = 1.0f;          // crossfaded strings vibrato / ensemble
     std::array<int, 2> lastNote { -1, -1 };   // last note started in Synth / Brass (glide source)
     std::array<float, 3> gateL { 1.0f, 1.0f, 1.0f }, gateR { 1.0f, 1.0f, 1.0f };
 public:
