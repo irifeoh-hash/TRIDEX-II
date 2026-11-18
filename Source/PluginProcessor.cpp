@@ -99,6 +99,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "vca_att",   "Attenuator", NR (-10.0f, 10.0f), 0.0f, "dB");
     addB (l, "auto_damp", "Auto Damp", false);
     addB (l, "syn_mono",  "Synthe Mono", false);
+    addB (l, "syn_legato","Synthe Legato", true);    // switch: RETRIG (off) / LEGATO (on)
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "syn_glide", "Synthe Glide Time", g, 0.0f, "s"); }
     addB (l, "syn_gliss", "Synthe Glissando", false);   // switch: PORTA (off) / GLISS (on)
 
@@ -122,6 +123,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "br_multi",  "Multiple Trigger", false);
     addB (l, "br_tsel",   "Trigger Select", false);
     addB (l, "br_mono",   "Brass Mono", false);
+    addB (l, "br_legato", "Brass Legato", true);
     addB (l, "br_polyvcf","Brass Poly VCF", false);
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "br_glide", "Brass Glide Time", g, 0.0f, "s"); }
     addB (l, "br_gliss",  "Brass Glissando", false);
@@ -189,7 +191,7 @@ const juce::StringArray& TridexProcessor::programmableIds()
     static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune", "v2_wave",
                                          "cutoff", "res", "eg_int", "kbd_track",
                                          "sf_a", "sf_d", "sf_s", "sf_r", "sa_a", "sa_d", "sa_s", "sa_r",
-                                         "vca_att", "auto_damp", "syn_glide", "syn_gliss", "syn_mono" };
+                                         "vca_att", "auto_damp", "syn_glide", "syn_gliss", "syn_mono", "syn_legato" };
     return ids;
 }
 
@@ -257,7 +259,7 @@ void TridexProcessor::syncParams()
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
     p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf");
-    p.synMono = on ("syn_mono");
+    p.synMono = on ("syn_mono"); p.synLegato = on ("syn_legato"); p.brLegato = on ("br_legato");
     p.synGlide = get ("syn_glide"); p.synGliss = on ("syn_gliss");
     p.brGlide = get ("br_glide"); p.brGliss = on ("br_gliss"); p.silenceNote = idx ("br_silence");
 

@@ -36,6 +36,7 @@ class ModeSwitch : public juce::ToggleButton
 {
 public:
     juce::Colour accent { 0xffece8de };
+    juce::String leftLabel { "PORTA" }, rightLabel { "GLISS" };
     void paintButton (juce::Graphics&, bool, bool) override;
 };
 
@@ -198,7 +199,7 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 1966, kH = 536;
+    static constexpr int kW = 2082, kH = 536;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;
@@ -212,7 +213,7 @@ private:
     juce::Slider& switchKnob (const char* id, int cx, int cy, const juce::String& label, bool white);
     tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
     void octave (const char* id, int cx, int y);
-    void modeSwitch (const char* id, int cx, int cy, bool orangeLegend);
+    void modeSwitch (const char* id, int cx, int cy, bool orangeLegend, const juce::String& left = "PORTA", const juce::String& right = "GLISS");
     juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,

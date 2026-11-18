@@ -58,7 +58,8 @@ struct Params
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
-    bool synMono = false;                               // Tridex II: monophonic synth (legato)
+    bool synMono = false;                               // Tridex II: monophonic synth
+    bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
     int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
     float synGlide = 0.0f, brGlide = 0.0f;              // Tridex II: glide time in seconds (0 = off)
@@ -646,7 +647,7 @@ private:
                     v.damped = true;                       // old note cut quickly (6 ms)
                 }
             voiceOnRaw (note, vel, kSyn);
-            if (legato)
+            if (legato && p.synLegato)                    // RETRIG mode: the new note starts its envelopes fresh
                 for (auto& v : voices)
                     if (v.keyDown && v.note == note && v.synGate)
                     {
@@ -705,14 +706,14 @@ private:
                     if (! v.synGate && ! v.stGate) v.keyDown = false;
                     brassHeld = std::max (0, brassHeld - 1);
                 }
-            suppressBrassTrigger = ! p.multiTrig && brassHeld + 1 >= brassThreshold();
+            suppressBrassTrigger = p.brLegato && brassHeld + 1 >= brassThreshold();   // LEGATO: no retrigger while a key is held
             voiceOnRaw (note, vel, kBr);
             suppressBrassTrigger = false;
         }
         else if (monoCurrent != note)
             voiceOnRaw (note, vel, kBr);
-        else if (p.multiTrig)
-            brassEnv.gateOn();   // same note again (e.g. arp repeat): retrigger if Multiple Trigger is on
+        else if (! p.brLegato)
+            brassEnv.gateOn();   // same note again (e.g. arp repeat): retrigger in RETRIG mode
         monoCurrent = note;
     }
 
