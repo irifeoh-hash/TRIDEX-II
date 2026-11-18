@@ -154,6 +154,28 @@ private:
     int value = 1;
 };
 
+// ABOUT page: opened by clicking the I Rife logo; synopsis + Instagram link.
+class AboutPage : public juce::Component
+{
+public:
+    explicit AboutPage (std::function<void()> onClose);
+    void paint (juce::Graphics&) override;
+
+private:
+    juce::HyperlinkButton instagram { "www.instagram.com/irife", juce::URL ("https://www.instagram.com/irife") };
+    juce::TextButton close { "CLOSE" };
+    std::function<void()> closeFn;
+};
+
+// Clickable area over the logo in the top bar.
+class LogoHotspot : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    std::function<void()> onClick;
+    LogoHotspot() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    void mouseUp (const juce::MouseEvent& e) override { if (onClick && getLocalBounds().contains (e.getPosition())) onClick(); }
+};
+
 // CHORUS page: overlays the control section; opened/closed with the CHORUS button in the top bar.
 class ChorusPage : public juce::Component
 {
@@ -273,6 +295,8 @@ private:
     tdxui::LedButton* arpBtn = nullptr;
     tdxui::LedButton* chorusBtn = nullptr;
     std::unique_ptr<tdxui::ChorusPage> chorusPage;
+    std::unique_ptr<tdxui::AboutPage> aboutPage;
+    std::unique_ptr<tdxui::LogoHotspot> logoHotspot;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;
     std::array<tdxui::LedButton*, 4> bankBtns {};

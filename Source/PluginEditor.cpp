@@ -564,6 +564,74 @@ void GateGrid::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+AboutPage::AboutPage (std::function<void()> onClose) : closeFn (std::move (onClose))
+{
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;
+    setSize (W, H);
+    instagram.setFont (juce::FontOptions (16.0f, juce::Font::bold), false, juce::Justification::centredLeft);
+    instagram.setColour (juce::HyperlinkButton::textColourId, kOrange);
+    instagram.setTooltip ("Open in your browser");
+    instagram.setBounds (330, 438, 320, 26);
+    addAndMakeVisible (instagram);
+
+    close.setColour (juce::TextButton::buttonColourId, kPanel2);
+    close.setColour (juce::TextButton::textColourOffId, kInk);
+    close.setBounds (W - 110, 12, 90, 26);
+    close.onClick = [this] { if (closeFn) closeFn(); };
+    addAndMakeVisible (close);
+}
+
+void AboutPage::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+
+    // Logo, large, on the left
+    static const juce::Image logo = juce::ImageCache::getFromMemory (BinaryData::irife_logo_png, BinaryData::irife_logo_pngSize);
+    if (logo.isValid())
+    {
+        g.setOpacity (1.0f);   // draw at full strength (the border colour above is translucent)
+        g.drawImageWithin (logo, 40, 70, 250, 120, juce::RectanglePlacement::centred);
+    }
+
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (30.0f, juce::Font::bold).withKerningFactor (0.12f));
+    g.drawText ("TRIDEX II", 330, 60, 500, 40, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (12.0f, juce::Font::bold).withKerningFactor (0.08f));
+    g.setColour (kOrange);
+    g.drawText ("PERFORMING KEYBOARD  /  BY I RIFE", 330, 98, 500, 18, juce::Justification::centredLeft);
+
+    const juce::String synopsis =
+        "Tridex II is a three-part performance synthesizer inspired by the classic early-80s "
+        "\"stack of keyboards in one\" polysynths. A polyphonic SYNTHESIZER, a BRASS section and an "
+        "ensemble STRINGS section share eight analog-modelled voices, each part with its own "
+        "filter, envelopes, keyboard split and output.\n\n"
+        "It started as a faithful study of the original circuits (divider-based oscillators, "
+        "paraphonic brass, three-phase string ensemble) and grew into a modern instrument: "
+        "two-oscillator synth and brass with glide, true mono and paraphonic or polyphonic brass, "
+        "per-part arpeggiators and step gates synced to your DAW, a chorus with a dimension-style "
+        "SPACE mode, per-part octave and split controls, 32 program memories and separate outputs.\n\n"
+        "Designed and produced by I Rife.";
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+    g.drawText ("Thank you for trying this project!", 330, 132, getWidth() - 380, 22, juce::Justification::centredLeft);
+
+    g.setColour (kInk.withAlpha (0.88f));
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawFittedText (synopsis, juce::Rectangle<int> (330, 166, getWidth() - 380, 240), juce::Justification::topLeft, 16, 1.0f);
+
+    g.setColour (kInk.withAlpha (0.7f));
+    g.setFont (juce::FontOptions (11.0f, juce::Font::bold).withKerningFactor (0.1f));
+    g.drawText ("FOLLOW", 330, 420, 200, 16, juce::Justification::centredLeft);
+
+    g.setColour (kInk.withAlpha (0.4f));
+    g.setFont (juce::FontOptions (9.0f));
+    g.drawText ("Korg and Trident are trademarks of Korg Inc. This independent project is not affiliated with or endorsed by Korg.",
+                330, getHeight() - 30, getWidth() - 360, 14, juce::Justification::centredLeft);
+}
+
+//==============================================================================
 SpaceButtons::SpaceButtons (juce::RangedAudioParameter& p)
     : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); })
 {
@@ -1252,13 +1320,27 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->onClick = [this]
         {
             arpPage->setVisible (! arpPage->isVisible());
-            if (arpPage->isVisible()) { chorusPage->setVisible (false); arpPage->toFront (false); }
+            if (arpPage->isVisible()) { chorusPage->setVisible (false); if (aboutPage) aboutPage->setVisible (false); arpPage->toFront (false); }
         };
         addAndMakeVisible (*b);
         arpBtn = b.get();
         owned.push_back (std::move (b));
         text ({ (float) lcd.getRight() + 48, 13, 40, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
     }
+
+    // ---------------- ABOUT page: click the I Rife logo (Tridex II)
+    aboutPage = std::make_unique<tdxui::AboutPage> ([this] { aboutPage->setVisible (false); });
+    aboutPage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*aboutPage);
+    logoHotspot = std::make_unique<tdxui::LogoHotspot>();
+    logoHotspot->setBounds (166, 2, 100, 34);
+    logoHotspot->setTooltip ("About Tridex II");
+    logoHotspot->onClick = [this]
+    {
+        aboutPage->setVisible (! aboutPage->isVisible());
+        if (aboutPage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); aboutPage->toFront (false); }
+    };
+    addAndMakeVisible (*logoHotspot);
 
     // ---------------- CHORUS page toggle (Tridex II)
     chorusPage = std::make_unique<tdxui::ChorusPage> (proc.apvts);
@@ -1271,7 +1353,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->onClick = [this]
         {
             chorusPage->setVisible (! chorusPage->isVisible());
-            if (chorusPage->isVisible()) { arpPage->setVisible (false); chorusPage->toFront (false); }
+            if (chorusPage->isVisible()) { arpPage->setVisible (false); aboutPage->setVisible (false); chorusPage->toFront (false); }
         };
         addAndMakeVisible (*b);
         chorusBtn = b.get();
