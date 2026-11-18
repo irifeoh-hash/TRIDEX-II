@@ -159,6 +159,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
         addB (l, (id + "_sync").toRawUTF8(), (nm + " Sync").toRawUTF8(), true);
     }
 
+    // ---- Step gate (Tridex II): per part, 8 steps x L/R lanes, own rate + sync
+    const char* sgNames[] = { "Synthe", "Brass", "Strings" };
+    for (int i = 0; i < 3; ++i)
+    {
+        const juce::String id ("sg" + juce::String (i + 1)), nm (juce::String (sgNames[i]) + " Step Gate");
+        addB (l, (id + "_on").toRawUTF8(),   (nm + " On").toRawUTF8(), false);
+        addB (l, (id + "_sync").toRawUTF8(), (nm + " Sync").toRawUTF8(), true);
+        addC (l, (id + "_rate").toRawUTF8(), (nm + " Rate").toRawUTF8(), { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3);
+        for (int k = 0; k < 8; ++k)
+        {
+            addB (l, (id + "_l" + juce::String (k + 1)).toRawUTF8(), (nm + " L" + juce::String (k + 1)).toRawUTF8(), true);
+            addB (l, (id + "_r" + juce::String (k + 1)).toRawUTF8(), (nm + " R" + juce::String (k + 1)).toRawUTF8(), true);
+        }
+    }
+
     return l;
 }
 
@@ -258,6 +273,17 @@ void TridexProcessor::syncParams()
         a.octaves = idx ((id + "_oct").toRawUTF8()) + 1;
         a.gate    = get ((id + "_gate").toRawUTF8());
         a.sync    = on ((id + "_sync").toRawUTF8());
+
+        const juce::String gid ("sg" + juce::String ((int) i + 1));
+        auto& g = p.gate[i];
+        g.on   = on ((gid + "_on").toRawUTF8());
+        g.sync = on ((gid + "_sync").toRawUTF8());
+        g.rate = idx ((gid + "_rate").toRawUTF8());
+        for (size_t k = 0; k < 8; ++k)
+        {
+            g.left[k]  = on ((gid + "_l" + juce::String ((int) k + 1)).toRawUTF8());
+            g.right[k] = on ((gid + "_r" + juce::String ((int) k + 1)).toRawUTF8());
+        }
     }
 }
 

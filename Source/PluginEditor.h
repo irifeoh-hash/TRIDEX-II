@@ -116,11 +116,30 @@ private:
     std::atomic<float>& jy;
     juce::Point<float> pos;
 };
-// ARP page: overlays the control section; opened/closed with the ARP button in the top bar.
-class ArpPage : public juce::Component
+// STEP GATE grid: 8 steps x L/R lanes, click to toggle, drag to paint; current step highlighted.
+class GateGrid : public juce::Component
 {
 public:
-    explicit ArpPage (juce::AudioProcessorValueTreeState& state);
+    GateGrid (juce::AudioProcessorValueTreeState& state, const juce::String& prefix);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    int currentStep = -1;
+
+private:
+    struct Cell { std::unique_ptr<juce::ParameterAttachment> att; bool on = true; };
+    juce::Rectangle<float> cellBounds (int lane, int step) const;
+    bool hit (juce::Point<float>, int& lane, int& step) const;
+    void set (int lane, int step, bool v);
+    std::array<std::array<Cell, 8>, 2> cells;
+    bool paintValue = true;
+};
+
+// ARP page: overlays the control section; opened/closed with the ARP button in the top bar.
+class ArpPage : public juce::Component, private juce::Timer
+{
+public:
+    ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (int)> gateStep);
     void paint (juce::Graphics&) override;
 
 private:
@@ -131,7 +150,12 @@ private:
         std::unique_ptr<LedButton> on, sync;
         std::unique_ptr<juce::ComboBox> mode, rate, oct;
         std::unique_ptr<juce::Slider> gate;
+        std::unique_ptr<LedButton> sgOn, sgSync;
+        std::unique_ptr<juce::ComboBox> sgRate;
+        std::unique_ptr<GateGrid> grid;
     };
+    void timerCallback() override;
+    std::function<int (int)> gateStepFn;
 
     juce::Slider& makeKnob (const juce::String& id, juce::Rectangle<int> r);
     juce::ComboBox& makeCombo (const juce::String& id, juce::Rectangle<int> r);

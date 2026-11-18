@@ -56,6 +56,8 @@ int main (int argc, char** argv)
     fails += render ("filters", flt, out);
     tdx::Params sp; sp.brOn = sp.stOn = true; sp.synZone = tdx::Zone::Upper; sp.brZone = tdx::Zone::Lower; sp.stZone = tdx::Zone::Lower;
     sp.splits = { 64, 50, 58 }; fails += render ("splits", sp, out);
+    tdx::Params gp; gp.stOn = true; for (auto& g : gp.gate) { g.on = true; g.rate = 3; g.left = { 1, 0, 1, 0, 1, 1, 0, 1 }; g.right = { 0, 1, 0, 1, 1, 0, 1, 1 }; }
+    gp.gate[1].sync = false; fails += render ("stepgate", gp, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

@@ -14,6 +14,7 @@
 
 #include "Primitives.h"
 #include "Arp.h"
+#include <atomic>
 
 namespace tdx
 {
@@ -72,6 +73,16 @@ struct Params
     // ---- Arpeggiators (one per section: 0 Synth, 1 Brass, 2 Strings)
     std::array<ArpParams, 3> arp {};
     float arpTempo = 120.0f;     // used when an arp's SYNC is off
+
+    // ---- Step gate (Tridex II): per section, 8 steps x L/R lanes, own rate and sync
+    struct StepGate
+    {
+        bool on = false, sync = true;
+        int rate = 3;                                   // index into kArpRates (default 1/16)
+        std::array<bool, 8> left { true, true, true, true, true, true, true, true };
+        std::array<bool, 8> right { true, true, true, true, true, true, true, true };
+    };
+    std::array<StepGate, 3> gate {};
 };
 
 //==============================================================================
@@ -184,7 +195,7 @@ public:
 
         if (held[(size_t) note]) releaseKey (note);
         held[(size_t) note] = true; sustained[(size_t) note] = false;
-        if (heldCount++ == 0) delayVibEnv = 0.0f;
+        if (heldCount++ == 0) { delayVibEnv = 0.0f; for (auto& q : gateFreeQn) q = 0.0; }   // free-running gates restart at step 1
 
         int direct = 0, arped = 0;
         for (int s = 0; s < 3; ++s)
@@ -244,6 +255,7 @@ public:
         const int v1Oct = 2 - std::clamp (p.v1Oct, 0, 2);   // footage index -> divider stage (0 = 4' core)
 
         const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
+        const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const float brassMixNorm = 1.0f / std::sqrt ((float) brassOscs);
         const double hostQnPerSample = hostBpm / 60.0 / sr;
@@ -421,11 +433,33 @@ public:
 
             const float synth = synSum * p.synVolume * kSynTrim;
 
+            // ---- Step gates: per section L/R gains, smoothed (~2 ms) so the chopping never clicks
+            float gl[3], gr[3];
+            for (int s = 0; s < 3; ++s)
+            {
+                const auto& sg = p.gate[(size_t) s];
+                float tl = 1.0f, tr = 1.0f;
+                if (sg.on)
+                {
+                    const double len = kArpRates[std::clamp (sg.rate, 0, 5)];
+                    const double pos = (sg.sync && hostPlaying) ? hostPpq : gateFreeQn[(size_t) s];
+                    const int step = (int) (((long long) std::floor (pos / len)) & 7);
+                    gateStepUi[(size_t) s].store (step, std::memory_order_relaxed);
+                    tl = sg.left[(size_t) step] ? 1.0f : 0.0f;
+                    tr = sg.right[(size_t) step] ? 1.0f : 0.0f;
+                }
+                else gateStepUi[(size_t) s].store (-1, std::memory_order_relaxed);
+                gateFreeQn[(size_t) s] += sg.sync ? hostQnPerSample : freeQnPerSample;
+                gateL[(size_t) s] += (tl - gateL[(size_t) s]) * gateSmooth;
+                gateR[(size_t) s] += (tr - gateR[(size_t) s]) * gateSmooth;
+                gl[s] = gateL[(size_t) s]; gr[s] = gateR[(size_t) s];
+            }
+
             // ---- Flanger on selected sections
             float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f;
-            (p.flSynth   ? fL : dL) += synth; (p.flSynth   ? fR : dR) += synth;
-            (p.flBrass   ? fL : dL) += brass; (p.flBrass   ? fR : dR) += brass;
-            (p.flStrings ? fL : dL) += sL;    (p.flStrings ? fR : dR) += sR;
+            (p.flSynth   ? fL : dL) += synth * gl[0]; (p.flSynth   ? fR : dR) += synth * gr[0];
+            (p.flBrass   ? fL : dL) += brass * gl[1]; (p.flBrass   ? fR : dR) += brass * gr[1];
+            (p.flStrings ? fL : dL) += sL * gl[2];    (p.flStrings ? fR : dR) += sR * gr[2];
             if (p.flSynth || p.flBrass || p.flStrings)
                 flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
 
@@ -749,6 +783,11 @@ private:
     std::array<std::array<int16_t, 128>, 3> sounding = makeSounding();   // per section: input note -> sounding note
     std::array<Arp, 3> arps;
     double hostBpm = 120.0, hostPpq = 0.0;
+    std::array<double, 3> gateFreeQn {};
+    std::array<float, 3> gateL { 1.0f, 1.0f, 1.0f }, gateR { 1.0f, 1.0f, 1.0f };
+public:
+    std::array<std::atomic<int>, 3> gateStepUi { -1, -1, -1 };   // current step per section, for the editor
+private:
     bool hostPlaying = false;
     int heldCount = 0;
     bool pedal = false;

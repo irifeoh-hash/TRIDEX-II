@@ -396,30 +396,140 @@ void Joystick::mouseUp (const juce::MouseEvent&)
 //==============================================================================
 namespace tdxui
 {
-ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
+//==============================================================================
+GateGrid::GateGrid (juce::AudioProcessorValueTreeState& state, const juce::String& prefix)
+{
+    for (int lane = 0; lane < 2; ++lane)
+        for (int k = 0; k < 8; ++k)
+        {
+            auto& c = cells[(size_t) lane][(size_t) k];
+            if (auto* prm = state.getParameter (prefix + (lane == 0 ? "_l" : "_r") + juce::String (k + 1)))
+            {
+                c.att = std::make_unique<juce::ParameterAttachment> (*prm, [this, lane, k] (float v)
+                {
+                    cells[(size_t) lane][(size_t) k].on = v > 0.5f;
+                    repaint();
+                });
+                c.att->sendInitialUpdate();
+            }
+        }
+}
+
+juce::Rectangle<float> GateGrid::cellBounds (int lane, int step) const
+{
+    const float labelW = 16.0f, gap = 4.0f;
+    const float w = ((float) getWidth() - labelW - gap * 7.0f) / 8.0f, h = ((float) getHeight() - gap) / 2.0f;
+    return { labelW + (float) step * (w + gap), (float) lane * (h + gap), w, h };
+}
+
+bool GateGrid::hit (juce::Point<float> pt, int& lane, int& step) const
+{
+    for (lane = 0; lane < 2; ++lane)
+        for (step = 0; step < 8; ++step)
+            if (cellBounds (lane, step).expanded (2.0f).contains (pt)) return true;
+    return false;
+}
+
+void GateGrid::set (int lane, int step, bool v)
+{
+    auto& c = cells[(size_t) lane][(size_t) step];
+    if (c.att && c.on != v) c.att->setValueAsCompleteGesture (v ? 1.0f : 0.0f);
+}
+
+void GateGrid::mouseDown (const juce::MouseEvent& e)
+{
+    int lane, step;
+    if (! hit (e.position, lane, step)) return;
+    paintValue = ! cells[(size_t) lane][(size_t) step].on;   // drag paints this value
+    set (lane, step, paintValue);
+}
+
+void GateGrid::mouseDrag (const juce::MouseEvent& e)
+{
+    int lane, step;
+    if (hit (e.position, lane, step)) set (lane, step, paintValue);
+}
+
+void GateGrid::paint (juce::Graphics& g)
+{
+    g.setFont (juce::FontOptions (9.0f, juce::Font::bold));
+    for (int lane = 0; lane < 2; ++lane)
+    {
+        const auto r0 = cellBounds (lane, 0);
+        g.setColour (kInk.withAlpha (0.8f));
+        g.drawText (lane == 0 ? "L" : "R", juce::Rectangle<float> (0, r0.getY(), 14, r0.getHeight()), juce::Justification::centred);
+        for (int k = 0; k < 8; ++k)
+        {
+            const auto r = cellBounds (lane, k);
+            const bool on = cells[(size_t) lane][(size_t) k].on;
+            if (on)
+            {
+                g.setGradientFill (juce::ColourGradient (kCapOrange.brighter (0.15f), 0, r.getY(), kCapOrange.darker (0.2f), 0, r.getBottom(), false));
+                g.fillRoundedRectangle (r, 2.5f);
+            }
+            else
+            {
+                g.setColour (juce::Colours::black.withAlpha (0.35f));
+                g.fillRoundedRectangle (r, 2.5f);
+                g.setColour (kInk.withAlpha (0.25f));
+                g.drawRoundedRectangle (r.reduced (0.5f), 2.5f, 1.0f);
+            }
+            if (k == currentStep)
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.9f));
+                g.drawRoundedRectangle (r.expanded (1.5f), 3.0f, 1.6f);
+            }
+        }
+    }
+}
+
+ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (int)> gateStep)
+    : apvts (state), gateStepFn (std::move (gateStep))
 {
     const int W = TridexPanel::kW - 48, H = kLowerY - 40;    // panel minus cheeks, below the header
     setSize (W, H);
     const char* ids[] = { "arp1", "arp2", "arp3" };
     const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
-    const int pad = 18, gap = 16, cardW = (W - 2 * pad - 2 * gap) / 3, cardY = 34, cardH = 170;
+    const int pad = 18, gap = 16, cardW = (W - 2 * pad - 2 * gap) / 3, cardY = 34, cardH = H - cardY - 10;
 
     for (int i = 0; i < 3; ++i)
     {
         auto& c = cards[(size_t) i];
-        const juce::String id (ids[i]);
+        const juce::String id (ids[i]), sg ("sg" + juce::String (i + 1));
         c.name = names[i];
         c.area = { pad + i * (cardW + gap), cardY, cardW, cardH };
         const int x = c.area.getX(), y = c.area.getY();
 
-        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 18, y + 70, 34, 42 }));
-        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 74,  y + 80, 110, 26 }));
-        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 196, y + 80, 86, 26 }));
-        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 294, y + 80, 56, 26 }));
-        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 362, y + 60, 64, 64 }));
-        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 444, y + 70, 34, 42 }));
+        // Arpeggiator row
+        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 18, y + 36, 34, 42 }));
+        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 74,  y + 46, 110, 26 }));
+        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 196, y + 46, 86, 26 }));
+        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 294, y + 46, 56, 26 }));
+        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 362, y + 26, 64, 64 }));
+        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 444, y + 36, 34, 42 }));
+
+        // Step gate row
+        const int gy = y + 122;
+        c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { x + 18, gy, 34, 42 }));
+        c.grid   = std::make_unique<GateGrid> (apvts, sg);
+        c.grid->setBounds (x + 66, gy + 2, 290, 44);
+        addAndMakeVisible (*c.grid);
+        c.sgRate = std::unique_ptr<juce::ComboBox> (&makeCombo (sg + "_rate", { x + 368, gy + 10, 70, 26 }));
+        c.sgSync = std::unique_ptr<LedButton> (&makeLed (sg + "_sync", { x + 450, gy, 34, 42 }));
     }
-    tempo = std::unique_ptr<juce::Slider> (&makeKnob ("arp_tempo", { pad, H - 52, 46, 46 }));
+    tempo = std::unique_ptr<juce::Slider> (&makeKnob ("arp_tempo", { W - 52, 2, 30, 30 }));
+    startTimerHz (30);
+}
+
+void ArpPage::timerCallback()
+{
+    if (! isVisible()) return;
+    for (int i = 0; i < 3; ++i)
+    {
+        const int st = gateStepFn ? gateStepFn (i) : -1;
+        auto& gr = *cards[(size_t) i].grid;
+        if (gr.currentStep != st) { gr.currentStep = st; gr.repaint(); }
+    }
 }
 
 juce::Slider& ArpPage::makeKnob (const juce::String& id, juce::Rectangle<int> r)
@@ -474,7 +584,7 @@ void ArpPage::paint (juce::Graphics& g)
     g.drawText ("ARPEGGIATOR", 18, 8, 300, 18, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (9.0f));
     g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("ONE PER PART  /  SYNC FOLLOWS THE HOST TEMPO  /  PRESS ARP AGAIN TO CLOSE", 150, 8, 600, 18, juce::Justification::centredLeft);
+    g.drawText ("ONE ARP + STEP GATE PER PART  /  SYNC LOCKS TO THE HOST CLOCK  /  PRESS ARP AGAIN TO CLOSE", 150, 8, 700, 18, juce::Justification::centredLeft);
 
     for (const auto& c : cards)
     {
@@ -497,15 +607,21 @@ void ArpPage::paint (juce::Graphics& g)
             const auto cb = comp.getBounds().toFloat();
             g.drawText (s, juce::Rectangle<float> (cb.getX() - 10, cb.getBottom() + 6, cb.getWidth() + 20, 12), juce::Justification::centred);
         };
-        lbl (*c.on, "ON"); lbl (*c.mode, "MODE"); lbl (*c.rate, "RATE"); lbl (*c.oct, "OCTAVES"); lbl (*c.sync, "SYNC");
+        lbl (*c.on, "ARP ON"); lbl (*c.mode, "MODE"); lbl (*c.rate, "RATE"); lbl (*c.oct, "OCTAVES"); lbl (*c.sync, "SYNC");
         const auto gb = c.gate->getBounds().toFloat();
-        g.drawText ("GATE", juce::Rectangle<float> (gb.getX(), gb.getBottom() - 2, gb.getWidth(), 12), juce::Justification::centred);
+        g.drawText ("NOTE LEN", juce::Rectangle<float> (gb.getX() - 6, gb.getBottom() - 2, gb.getWidth() + 12, 12), juce::Justification::centred);
+        lbl (*c.sgOn, "STEP GATE"); lbl (*c.sgRate, "RATE"); lbl (*c.sgSync, "SYNC");
+
+        // divider between the arp row and the step gate row
+        g.setColour (kInk.withAlpha (0.12f));
+        g.drawHorizontalLine (c.sgOn->getY() - 12, r.getX() + 10, r.getRight() - 10);
+        g.setColour (kInk.withAlpha (0.85f));
     }
 
     g.setColour (kInk.withAlpha (0.85f));
     g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
     const auto tb = tempo->getBounds();
-    g.drawText ("TEMPO (WHEN SYNC IS OFF)", tb.getRight() + 6, tb.getCentreY() - 6, 200, 12, juce::Justification::centredLeft);
+    g.drawText ("TEMPO (WHEN SYNC IS OFF)", tb.getX() - 206, tb.getCentreY() - 6, 200, 12, juce::Justification::centredRight);
 }
 } // namespace tdxui
 
@@ -854,7 +970,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     lcd = { 330, 9, 320, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
-    arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts);
+    arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
     arpPage->setBounds (24, 40, kW - 48, kLowerY - 40);
     addChildComponent (*arpPage);
     {

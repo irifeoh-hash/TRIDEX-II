@@ -50,6 +50,7 @@ public:
     std::atomic<float> guiJoyX { 0.0f }, guiJoyY { 0.0f };   // editor joystick, -1..1
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    int getGateStep (int section) const { return engine.gateStepUi[(size_t) juce::jlimit (0, 2, section)].load (std::memory_order_relaxed); }
 
 private:
     struct Program { juce::String name; std::map<juce::String, float> values; };
