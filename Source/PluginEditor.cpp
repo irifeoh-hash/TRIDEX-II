@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <BinaryData.h>
 
 namespace
 {
@@ -934,9 +935,10 @@ void TridexPanel::paint (juce::Graphics& g)
     g.setColour (kInk);
     g.setFont (juce::FontOptions (21.0f, juce::Font::bold).withKerningFactor (0.12f));
     g.drawText ("TRIDEX II", 36, 6, 200, 30, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.6f));
-    g.drawText ("PERFORMING KEYBOARD", 176, 14, 140, 14, juce::Justification::centredLeft);
+    // I Rife logo, small, beside the wordmark
+    static const juce::Image logo = juce::ImageCache::getFromMemory (BinaryData::irife_logo_png, BinaryData::irife_logo_pngSize);
+    if (logo.isValid())
+        g.drawImageWithin (logo, 168, 3, 96, 32, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid | juce::RectanglePlacement::onlyReduceInSize);
 
     g.setColour (juce::Colour (0xff1d0705));
     g.fillRoundedRectangle (lcd.toFloat(), 3.0f);

@@ -41,6 +41,10 @@ juce_add_plugin(Tridex80
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
+# Embedded artwork (I Rife logo)
+juce_add_binary_data(TridexAssets SOURCES Resources/irife_logo.png)
+set_target_properties(TridexAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_sources(Tridex80 PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
@@ -66,7 +70,7 @@ target_compile_definitions(Tridex80 PUBLIC
     JUCE_PLUGINHOST_LV2=0)
 
 target_link_libraries(Tridex80
-    PRIVATE juce::juce_audio_utils
+    PRIVATE juce::juce_audio_utils TridexAssets
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
 # MinGW cross builds: MSVC's #pragma comment(lib) is ignored, so name the Windows libraries explicitly.
