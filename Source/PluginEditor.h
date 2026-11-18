@@ -81,6 +81,26 @@ private:
     int value = 0;
 };
 
+// Per-part split point: note name display. Click the left/right edge for -/+ a semitone,
+// drag up/down for bigger moves, double-click to reset to C3 (middle C).
+class SplitPointControl : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    SplitPointControl (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+private:
+    void setNote (int n);
+    juce::ParameterAttachment attachment;
+    int note = 60, dragStartNote = 60;
+    bool dragging = false;
+};
+
 // Spring-loaded joystick: X = pitch bend, Y+ = vibrato, Y- = trill.
 class Joystick : public juce::Component, public juce::SettableTooltipClient
 {

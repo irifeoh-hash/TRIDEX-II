@@ -54,6 +54,8 @@ int main (int argc, char** argv)
     fails += render ("oct_shift", oct, out);
     tdx::Params flt; flt.brOn = flt.stOn = true; flt.brPolyVcf = true; flt.brRes = 0.9f; flt.stCutoff = 0.55f; flt.stRes = 0.8f; flt.res = 1.0f;
     fails += render ("filters", flt, out);
+    tdx::Params sp; sp.brOn = sp.stOn = true; sp.synZone = tdx::Zone::Upper; sp.brZone = tdx::Zone::Lower; sp.stZone = tdx::Zone::Lower;
+    sp.splits = { 64, 50, 58 }; fails += render ("splits", sp, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

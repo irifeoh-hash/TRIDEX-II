@@ -287,6 +287,69 @@ void OctaveControl::mouseDoubleClick (const juce::MouseEvent& e)
 }
 
 //==============================================================================
+SplitPointControl::SplitPointControl (juce::RangedAudioParameter& p)
+    : attachment (p, [this] (float v) { note = juce::roundToInt (v); repaint(); })
+{
+    attachment.sendInitialUpdate();
+}
+
+void SplitPointControl::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0xff1d0705));
+    g.fillRoundedRectangle (b, 2.5f);
+    g.setColour (kLedOn.withAlpha (0.6f));
+    const float cy = b.getCentreY();
+    juce::Path l, r;
+    l.addTriangle (b.getX() + 3, cy, b.getX() + 7, cy - 3, b.getX() + 7, cy + 3);
+    r.addTriangle (b.getRight() - 3, cy, b.getRight() - 7, cy - 3, b.getRight() - 7, cy + 3);
+    g.fillPath (l); g.fillPath (r);
+    g.setColour (kLedOn);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::bold));
+    g.drawText (juce::MidiMessage::getMidiNoteName (note, true, true, 3), b, juce::Justification::centred);
+}
+
+void SplitPointControl::setNote (int n)
+{
+    n = juce::jlimit (24, 108, n);
+    if (n != note) attachment.setValueAsPartOfGesture ((float) n);
+}
+
+void SplitPointControl::mouseDown (const juce::MouseEvent&)
+{
+    dragStartNote = note;
+    dragging = false;
+    attachment.beginGesture();
+}
+
+void SplitPointControl::mouseDrag (const juce::MouseEvent& e)
+{
+    if (std::abs (e.getDistanceFromDragStartY()) < 3 && ! dragging) return;
+    dragging = true;
+    setNote (dragStartNote - e.getDistanceFromDragStartY() / 4);
+}
+
+void SplitPointControl::mouseUp (const juce::MouseEvent& e)
+{
+    if (! dragging)
+    {
+        if (e.x < getWidth() / 3) setNote (note - 1);
+        else if (e.x > getWidth() * 2 / 3) setNote (note + 1);
+    }
+    attachment.endGesture();
+}
+
+void SplitPointControl::mouseDoubleClick (const juce::MouseEvent&)
+{
+    attachment.setValueAsCompleteGesture (60.0f);
+}
+
+void SplitPointControl::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+{
+    attachment.setValueAsCompleteGesture ((float) juce::jlimit (24, 108, note + (w.deltaY > 0 ? 1 : -1)));
+}
+
+//==============================================================================
 void Joystick::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat().reduced (2.0f);
@@ -579,6 +642,14 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             addAndMakeVisible (*sel);
             owned.push_back (std::move (sel));
             text ({ (float) col (1) - 28, (float) y + 22, 56, 10 }, names[i], 8.0f);
+
+            // Tridex II: this part's own split point
+            const char* splitIds[] = { "syn_split", "br_split", "st_split" };
+            auto sp = std::make_unique<tdxui::SplitPointControl> (*proc.apvts.getParameter (splitIds[i]));
+            sp->setBounds (col (1) - 22, y + 32, 44, 13);
+            sp->setTooltip (juce::String (names[i]) + " split point: click the arrows, drag, or scroll; double-click for C3");
+            addAndMakeVisible (*sp);
+            owned.push_back (std::move (sp));
         }
         auto [a, b] = sectionEnd (2);
         moduleLabel ((float) a + kCol, (float) b, kModY, "KBD SPLIT");
@@ -771,7 +842,6 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             text ({ (float) sx + 15, 15, 44, 12 }, name, 8.0f, false, juce::Justification::centredLeft);
             sx += 68;
         };
-        mini ("split", "SPLIT", "Split point (hardware: fixed, lower 2 / upper 3 octaves)");
         mini ("bend_range", "BEND", "Joystick pitch-bend range");
         mini ("drift", "DRIFT", "Analog drift (per-voice tuning tolerance)");
         mini ("vel_sens", "VELO", "Velocity sensitivity (not on the hardware)");

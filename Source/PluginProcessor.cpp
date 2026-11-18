@@ -59,7 +59,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "fl_speed",   "Flanger Speed", NR (0.05f, 8.0f, 0.0f, 0.4f), 0.3f, "Hz");
 
     // ---- Plugin extras (not on the hardware panel)
-    addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // hardware: fixed, lower 2 / upper 3 octaves
+    addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // legacy (unused): per-part splits below
+    addF (l, "syn_split",  "Synthe Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
+    addF (l, "br_split",   "Brass Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
+    addF (l, "st_split",   "Strings Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
     addF (l, "bend_range", "Bend Range", NR (0.0f, 12.0f, 1.0f), 2.0f, "st");
     addF (l, "transpose",  "Transpose", NR (-12.0f, 12.0f, 1.0f), 0.0f, "st");
     addF (l, "syn_octsh",  "Synthe Octave", NR (-2.0f, 2.0f, 1.0f), 0.0f, "oct");
@@ -213,7 +216,8 @@ void TridexProcessor::syncParams()
     p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int");
     p.flSynth = on ("fl_syn"); p.flBrass = on ("fl_br"); p.flStrings = on ("fl_st");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
-    p.splitPoint = idx ("split"); p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));
+    p.splitPoint = idx ("split");
+    p.splits = { juce::roundToInt (get ("syn_split")), juce::roundToInt (get ("br_split")), juce::roundToInt (get ("st_split")) }; p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));
     p.octShift = { juce::roundToInt (get ("syn_octsh")), juce::roundToInt (get ("br_octsh")), juce::roundToInt (get ("st_octsh")) }; p.drift = get ("drift");
     p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode");
 

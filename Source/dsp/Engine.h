@@ -27,6 +27,7 @@ struct Params
     // ---- Total control
     float master = 0.8f, tuneCents = 0.0f;
     int splitPoint = 60, assignMode = 0;                // 0 = Mode 1, 1 = Mode 2
+    std::array<int, 3> splits { 60, 60, 60 };           // Tridex II: split point per part (Synth, Brass, Strings)
     float mgSpeed = 5.5f, mgIntensity = 0.5f;           // joystick vibrato/trill
     bool delayVib = false; float delayVibInt = 0.3f;     // delay time is fixed on the hardware
     float bendRange = 2.0f;
@@ -176,9 +177,9 @@ public:
     void noteOn (int note, float vel)
     {
         int mask = 0;
-        if (p.synOn && inZone (p.synZone, note)) mask |= kSyn;
-        if (p.brOn  && inZone (p.brZone, note))  mask |= kBr;
-        if (p.stOn  && inZone (p.stZone, note))  mask |= kSt;
+        if (p.synOn && inZone (p.synZone, note, 0)) mask |= kSyn;
+        if (p.brOn  && inZone (p.brZone, note, 1))  mask |= kBr;
+        if (p.stOn  && inZone (p.stZone, note, 2))  mask |= kSt;
         if (mask == 0) return;
 
         if (held[(size_t) note]) releaseKey (note);
@@ -453,10 +454,11 @@ private:
     // Brass waveforms: Saw, Square (50%), Pulse (25%).
     static float brassPulseWidth (int wave) { return wave == 1 ? 0.5f : (wave == 2 ? 0.25f : -1.0f); }
 
-    bool inZone (Zone z, int note) const
+    bool inZone (Zone z, int note, int section) const
     {
         if (z == Zone::Both) return true;
-        return z == Zone::Lower ? note < p.splitPoint : note >= p.splitPoint;
+        const int split = p.splits[(size_t) std::clamp (section, 0, 2)];
+        return z == Zone::Lower ? note < split : note >= split;
     }
 
     // KLM-377 key assigner (owner's manual p.4/42):
