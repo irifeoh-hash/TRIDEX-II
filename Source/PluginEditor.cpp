@@ -11,6 +11,7 @@ const juce::Colour kLid       { 0xff1f1e1c };
 const juce::Colour kWood      { 0xff3e1d0f };
 const juce::Colour kInk       { 0xffece8de };
 const juce::Colour kOrange    { 0xffe8893a };
+const juce::Colour kSynText   { 0xff7fd96f };   // synth-section legends (part green)
 const juce::Colour kHeader    { 0xffc3c0b7 };
 const juce::Colour kHeaderInk { 0xff2b2a27 };
 const juce::Colour kCapGrey   { 0xffb7b5ae };
@@ -19,6 +20,7 @@ const juce::Colour kCapGreen  { 0xffa9c23c };
 const juce::Colour kCapBlue   { 0xff4f8fd8 };   // non-part on/off switches (OUTPUT, effect ON)
 const juce::Colour kCapOrange { 0xffeb8a34 };
 const juce::Colour kCapRed    { 0xffcf3426 };
+const juce::Colour kCapYellow { 0xffe8c93a };   // programmer
 const juce::Colour kCapTan    { 0xff6e4a30 };
 // Part colours for the split indicators: SYNTHE green, BRASS red, STRINGS orange.
 const juce::Colour kPartCol[3] = { juce::Colour (0xff5bd34f), juce::Colour (0xffff3b2c), juce::Colour (0xffff9a2e) };
@@ -554,7 +556,7 @@ void GateGrid::paint (juce::Graphics& g)
             const bool on = cells[(size_t) lane][(size_t) k].on;
             if (on)
             {
-                g.setGradientFill (juce::ColourGradient (kCapOrange.brighter (0.15f), 0, r.getY(), kCapOrange.darker (0.2f), 0, r.getBottom(), false));
+                g.setGradientFill (juce::ColourGradient (colour.brighter (0.15f), 0, r.getY(), colour.darker (0.2f), 0, r.getBottom(), false));
                 g.fillRoundedRectangle (r, 2.5f);
             }
             else
@@ -934,6 +936,7 @@ ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (
         c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { gx, y + 30, 34, 42 }));
         c.sgOn->cap = kPartCap[i];
         c.grid   = std::make_unique<GateGrid> (apvts, sg);
+        c.grid->colour = kPartCap[i];
         c.grid->setBounds (gx + 46, y + 32, 270, 44);
         addAndMakeVisible (*c.grid);
         c.sgRate = std::unique_ptr<juce::ComboBox> (&makeCombo (sg + "_rate", { gx + 326, y + 40, 70, 26 }));
@@ -1063,7 +1066,7 @@ juce::Slider& TridexPanel::knob (const char* id, int cx, int cy, const juce::Str
     addAndMakeVisible (*s);
     sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, id, *s));
     if (label.isNotEmpty())
-        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f, false, juce::Justification::centred, white ? kOrange : juce::Colour());
+        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f, false, juce::Justification::centred, white ? kSynText : juce::Colour());
     auto& ref = *s;
     owned.push_back (std::move (s));
     return ref;
@@ -1112,7 +1115,7 @@ tdxui::LedButton& TridexPanel::progButton (const juce::String& label, int cx, in
 {
     auto b = std::make_unique<tdxui::LedButton> (label);
     b->setBounds (cx - 14, y, 28, 36);
-    b->cap = kCapOrange;
+    b->cap = kCapYellow;
     b->onClick = std::move (onClick);
     addAndMakeVisible (*b);
     text ({ (float) cx - 20, (float) y + 38, 40, 10 }, label, 8.0f, true);
@@ -1150,7 +1153,7 @@ void TridexPanel::octave (const char* id, int cx, int y)
 void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend, const juce::String& left, const juce::String& right)
 {
     auto sw = std::make_unique<tdxui::ModeSwitch>();
-    sw->accent = orangeLegend ? kOrange : kInk;
+    sw->accent = orangeLegend ? kSynText : kInk;
     sw->leftLabel = left; sw->rightLabel = right;
     sw->setBounds (cx - 28, cy - 18, 56, 30);
     sw->setTooltip (left == "PORTA" ? "Glide mode: PORTA (smooth slide) / GLISS (semitone steps)"
@@ -1159,7 +1162,7 @@ void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend,
     addAndMakeVisible (*sw);
     bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, id, *sw));
     owned.push_back (std::move (sw));
-    text ({ (float) cx - 27, (float) cy + 16, 54, 11 }, left + " / " + right, 7.0f, false, juce::Justification::centred, orangeLegend ? kOrange : juce::Colour());
+    text ({ (float) cx - 27, (float) cy + 16, 54, 11 }, left + " / " + right, 7.0f, false, juce::Justification::centred, orangeLegend ? kSynText : juce::Colour());
 }
 
 void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j, juce::Colour col)
@@ -1236,19 +1239,19 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         switchKnob ("v1_wave", col (1), kRow1, "WAVEFORM", true);
         knob ("pw_int", col (0), kRow2, "PW/PWM", true);
         knob ("pwm_speed", col (1), kRow2, "PWM SPEED", true);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1", kOrange);
+        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1", kSynText);
 
         switchKnob ("v2_scale", col (2), kRow1, "OCTAVE", true);
         switchKnob ("v2_wave", col (3), kRow1, "WAVEFORM", true);
         knob ("v2_detune", col (2), kRow2, "DETUNE", true);
         knob ("vco_mix", col (3), kRow2, "VCO MIX", true);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kOrange);
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kSynText);
 
         knob ("cutoff", col (4), kRow1, "CUTOFF FREQ", true);
         knob ("res", col (5), kRow1, "RESONANCE", true);
         switchKnob ("kbd_track", col (4), kRow2, "KBD TRACK", true);
         knob ("eg_int", col (5), kRow2, "EG INTENSITY", true);
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF", kOrange);
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF", kSynText);
 
         const char* fe[] = { "sf_a", "sf_d", "sf_s", "sf_r" };
         const char* ae[] = { "sa_a", "sa_d", "sa_s", "sa_r" };
@@ -1258,25 +1261,25 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             knob (fe[i], col (6 + i), kRow1, nm[i], true);
             knob (ae[i], col (6 + i), kRow2, nm[i], true);
         }
-        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true, juce::Justification::centred, kOrange);
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG", kOrange);
+        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true, juce::Justification::centred, kSynText);
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG", kSynText);
 
         knob ("vca_att", col (10), kRow1, "ATTENUATOR", true);
         led ("auto_damp", col (10), kRow2 - 22, "AUTO DAMP");
-        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kOrange);
+        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kSynText);
         // Tridex II: glide (portamento / glissando)
         knob ("syn_glide", col (11), kRow1, "GLIDE TIME", true);
         modeSwitch ("syn_gliss", col (11), kRow2, true);
         // Tridex II: MONO column (MONO on/off + RETRIG / LEGATO)
         led ("syn_mono", col (12), kRow1 - 22, "MONO");
         modeSwitch ("syn_legato", col (12), kRow2, true, "RETRIG", "LEGATO");
-        moduleLabel ((float) s0 + 12 * kCol, (float) s0 + 13 * kCol, kModY, "MONO", kOrange);
-        moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kOrange);
+        moduleLabel ((float) s0 + 12 * kCol, (float) s0 + 13 * kCol, kModY, "MONO", kSynText);
+        moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kSynText);
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
         int bx = s0 + 16;
         writeBtn = &progButton ("WRITE", bx, kSwY, [this] { writeArmed = ! writeArmed; pendingBank = proc.getCurrentProgram() / 8; });
-        writeBtn->redCap = true;
+        writeBtn->cap = kCapGrey;   // the LED still shows red while armed
         manualBtn = &progButton ("MANUAL", bx += 32, kSwY, [this] { proc.setManual(); writeArmed = false; });
         bx += 10;
         for (int i = 0; i < 4; ++i)

@@ -224,6 +224,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     int currentStep = -1;
+    juce::Colour colour { 0xffeb8a34 };   // part colour
 
 private:
     struct Cell { std::unique_ptr<juce::ParameterAttachment> att; bool on = true; };
