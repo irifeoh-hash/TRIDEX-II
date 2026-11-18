@@ -1,11 +1,11 @@
-name: Build VST3
+name: Build plugins
 
 on:
   push:
   workflow_dispatch:
 
 permissions:
-  contents: write   # lets the Windows job publish the download as a Release
+  contents: write   # lets the publish job create the Release
 
 jobs:
   build:
@@ -15,53 +15,38 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-          # Add macOS / Linux here if ever needed:
-          #   - os: macos-latest
-          #     name: macOS
-          #   - os: ubuntu-22.04
-          #     name: Linux
+          - os: macos-latest
+            name: macOS
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxcomposite-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev ninja-build
 
       - name: Configure
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
-            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+            # Universal binary: native on Apple Silicon and Intel Macs
+            cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
           else
             cmake -B build -DCMAKE_BUILD_TYPE=Release
           fi
 
       - name: Build
-        run: cmake --build build --config Release --parallel 4 --target Tridex80_VST3
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake --build build --config Release --parallel 4 --target Tridex80_VST3 Tridex80_AU
+          else
+            cmake --build build --config Release --parallel 4 --target Tridex80_VST3
+          fi
 
-      - name: Package
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           mkdir -p dist
           ART=$(find build -type d -path "*Tridex80_artefacts/Release" | head -1)
           cp -R "$ART/VST3/Tridex II.vst3" dist/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Tridex80-${{ matrix.name }}
-          path: dist
-
-      # Windows: publish a ready-to-download zip as the "tridex-ii-latest" Release.
-      - name: Publish Windows download
-        if: runner.os == 'Windows' && github.ref == 'refs/heads/main'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
           cat > dist/README.txt <<'TXT'
           Tridex II - Windows 64-bit VST3
 
@@ -70,8 +55,57 @@ jobs:
           2. Rescan plugins in your DAW (FL Studio: Options > Manage plugins > Find installed plugins).
              It appears as an instrument: "Tridex Audio - Tridex II".
           TXT
-          cd dist && 7z a -tzip ../TridexII-Windows-VST3.zip "Tridex II.vst3" README.txt && cd ..
+          cd dist && 7z a -tzip ../TridexII-Windows-VST3.zip "Tridex II.vst3" README.txt
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist
+          ART=$(find build -type d -path "*Tridex80_artefacts/Release" | head -1)
+          cp -R "$ART/VST3/Tridex II.vst3" dist/
+          cp -R "$ART/AU/Tridex II.component" dist/
+          # Ad-hoc signature (required to load on Apple Silicon; no Apple developer ID involved)
+          codesign --force --deep -s - "dist/Tridex II.vst3"
+          codesign --force --deep -s - "dist/Tridex II.component"
+          lipo -info "dist/Tridex II.vst3/Contents/MacOS/Tridex II"
+          cat > dist/README.txt <<'TXT'
+          Tridex II - macOS (Apple Silicon + Intel) VST3 and Audio Unit
+
+          1. Copy "Tridex II.vst3"      into  ~/Library/Audio/Plug-Ins/VST3
+             Copy "Tridex II.component" into  ~/Library/Audio/Plug-Ins/Components   (Logic Pro / GarageBand)
+             (In Finder: Go > Go to Folder... and paste the path.)
+          2. These files are not notarized by Apple, so macOS blocks them at first.
+             Open Terminal and run these two lines once:
+               xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Tridex II.vst3"
+               xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Tridex II.component"
+          3. Restart your DAW and rescan plugins. In Logic it appears under
+             AU Instruments > Tridex Audio > Tridex II.
+          TXT
+          (cd dist && zip -qry ../TridexII-macOS.zip "Tridex II.vst3" "Tridex II.component" README.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tridex-${{ matrix.name }}
+          path: TridexII-*.zip
+
+  # Publish whatever built (Windows and/or macOS) as the "tridex-ii-latest" Release.
+  publish:
+    needs: build
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la artifacts
           gh release delete tridex-ii-latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create tridex-ii-latest TridexII-Windows-VST3.zip --title "Tridex II (latest build)" \
-            --notes "Windows 64-bit VST3. Download TridexII-Windows-VST3.zip below, unzip, copy 'Tridex II.vst3' to C:\\Program Files\\Common Files\\VST3." \
+          gh release create tridex-ii-latest artifacts/*.zip --title "Tridex II (latest build)" \
+            --notes "Windows: TridexII-Windows-VST3.zip (VST3). macOS: TridexII-macOS.zip (VST3 + AU, Apple Silicon and Intel). Install steps are in the README inside each zip." \
             --target "$GITHUB_SHA" --prerelease

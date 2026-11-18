@@ -97,8 +97,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "sa_r", "VCA EG Release", timeRange (15.0f), 0.4f,  "s");
     addF (l, "vca_att",   "Attenuator", NR (-10.0f, 10.0f), 0.0f, "dB");
     addB (l, "auto_damp", "Auto Damp", false);
+    addB (l, "syn_mono",  "Synthe Mono", false);
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "syn_glide", "Synthe Glide Time", g, 0.0f, "s"); }
-    addC (l, "syn_gliss", "Synthe Glide Mode", { "Porta", "Gliss" }, 0);
+    addB (l, "syn_gliss", "Synthe Glissando", false);   // switch: PORTA (off) / GLISS (on)
 
     // ---- Brass section
     addB (l, "br_on",     "Brass Output", false);
@@ -122,7 +123,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "br_mono",   "Brass Mono", false);
     addB (l, "br_polyvcf","Brass Poly VCF", false);
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "br_glide", "Brass Glide Time", g, 0.0f, "s"); }
-    addC (l, "br_gliss",  "Brass Glide Mode", { "Porta", "Gliss" }, 0);
+    addB (l, "br_gliss",  "Brass Glissando", false);
     addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
 
     // ---- Strings section
@@ -187,7 +188,7 @@ const juce::StringArray& TridexProcessor::programmableIds()
     static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune", "v2_wave",
                                          "cutoff", "res", "eg_int", "kbd_track",
                                          "sf_a", "sf_d", "sf_s", "sf_r", "sa_a", "sa_d", "sa_s", "sa_r",
-                                         "vca_att", "auto_damp", "syn_glide", "syn_gliss" };
+                                         "vca_att", "auto_damp", "syn_glide", "syn_gliss", "syn_mono" };
     return ids;
 }
 
@@ -255,8 +256,9 @@ void TridexProcessor::syncParams()
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
     p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf");
-    p.synGlide = get ("syn_glide"); p.synGliss = idx ("syn_gliss") == 1;
-    p.brGlide = get ("br_glide"); p.brGliss = idx ("br_gliss") == 1; p.silenceNote = idx ("br_silence");
+    p.synMono = on ("syn_mono");
+    p.synGlide = get ("syn_glide"); p.synGliss = on ("syn_gliss");
+    p.brGlide = get ("br_glide"); p.brGliss = on ("br_gliss"); p.silenceNote = idx ("br_silence");
 
     p.stOn = on ("st_on"); p.stZone = zone ("st_zone"); p.stVolume = get ("st_vol");
     p.st16 = on ("st_16"); p.st8 = on ("st_8"); p.st4 = on ("st_4");

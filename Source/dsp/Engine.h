@@ -58,6 +58,7 @@ struct Params
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
+    bool synMono = false;                               // Tridex II: monophonic synth (last-note priority, legato)
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
     float synGlide = 0.0f, brGlide = 0.0f;              // Tridex II: glide time in seconds (0 = off)
     bool synGliss = false, brGliss = false;             // false = portamento (smooth), true = glissando (semitone steps)
@@ -243,7 +244,7 @@ public:
     void allNotesOff()
     {
         for (int s = 0; s < 3; ++s) arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
-        monoCurrent = -1; monoCount = 0;
+        monoCurrent = -1; monoCount = 0; sCurrent = -1; sCount = 0;
         for (auto& v : voices) if (v.keyDown) releaseSections (v, kAll, false);
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         heldCount = 0;
@@ -267,6 +268,8 @@ public:
 
         // Leaving MONO releases the mono brass note (keys are re-read on the next press).
         if (lastBrMono && ! p.brMono) monoReset();
+        if (lastSynMono && ! p.synMono) { if (sCurrent >= 0) voiceOffRaw (sCurrent, kSyn); sCurrent = -1; sCount = 0; }
+        lastSynMono = p.synMono;
         lastBrMono = p.brMono;
 
         // An arp that was switched off releases whatever it was playing.
@@ -575,6 +578,7 @@ private:
             const int sn = std::clamp (note + 12 * std::clamp (p.octShift[(size_t) s], -2, 2), 0, 127);
             sounding[(size_t) s][(size_t) note] = (int16_t) sn;
             if (bit == kBr && p.brMono) brassMonoOn (sn, vel);
+            else if (bit == kSyn && p.synMono) synthMonoOn (sn, vel);
             else voiceOnRaw (sn, vel, bit);
         }
     }
@@ -589,11 +593,72 @@ private:
             if (sn < 0) sn = note;
             sounding[(size_t) s][(size_t) note] = -1;
             if (bit == kBr && p.brMono) brassMonoOff (sn);
+            else if (bit == kSyn && p.synMono) synthMonoOff (sn);
             else voiceOffRaw (sn, bit);
         }
     }
 
     // ---- Monophonic brass: one note at a time, last-note priority.
+    // ---- Monophonic synth: one note at a time, last-note priority; legato when notes overlap
+    // (the new note picks up the envelopes where the old one was, so nothing restarts).
+    void synthMonoOn (int note, float vel)
+    {
+        sRemove (note);
+        if (sCount < (int) sStack.size()) { sStack[(size_t) sCount] = note; sVel[(size_t) sCount] = vel; ++sCount; }
+        synthMonoSwitchTo (note, vel);
+    }
+
+    void synthMonoOff (int note)
+    {
+        sRemove (note);
+        if (note != sCurrent) { voiceOffRaw (note, kSyn); return; }
+        if (sCount > 0) synthMonoSwitchTo (sStack[(size_t) sCount - 1], sVel[(size_t) sCount - 1]);
+        else { voiceOffRaw (sCurrent, kSyn); sCurrent = -1; }
+    }
+
+    void synthMonoSwitchTo (int note, float vel)
+    {
+        if (sCurrent >= 0 && sCurrent != note)
+        {
+            bool legato = false;
+            Adsr::Stage fs = Adsr::Idle, as = Adsr::Idle;
+            float fv = 0.0f, av = 0.0f;
+            for (auto& v : voices)
+                if (v.keyDown && v.note == sCurrent && v.synGate)
+                {
+                    legato = true;
+                    fs = v.fenv.stage; fv = v.fenv.value; as = v.aenv.stage; av = v.aenv.value;
+                    releaseSections (v, kSyn, false);
+                    v.damped = true;                       // old note cut quickly (6 ms)
+                }
+            voiceOnRaw (note, vel, kSyn);
+            if (legato)
+                for (auto& v : voices)
+                    if (v.keyDown && v.note == note && v.synGate)
+                    {
+                        v.fenv.stage = fs; v.fenv.value = fv;
+                        v.aenv.stage = as; v.aenv.value = av;
+                    }
+        }
+        else if (sCurrent != note)
+            voiceOnRaw (note, vel, kSyn);
+        else
+            for (auto& v : voices)
+                if (v.keyDown && v.note == note && v.synGate) { v.fenv.gateOn(); v.aenv.gateOn(); }   // same note again: retrigger
+        sCurrent = note;
+    }
+
+    void sRemove (int note)
+    {
+        for (int i = 0; i < sCount; ++i)
+            if (sStack[(size_t) i] == note)
+            {
+                for (int j = i; j < sCount - 1; ++j) { sStack[(size_t) j] = sStack[(size_t) j + 1]; sVel[(size_t) j] = sVel[(size_t) j + 1]; }
+                --sCount;
+                return;
+            }
+    }
+
     void brassMonoOn (int note, float vel)
     {
         monoRemove (note);
@@ -798,7 +863,10 @@ private:
     std::array<int, 128> monoStack {};
     std::array<float, 128> monoVel {};
     int monoCount = 0, monoCurrent = -1;
-    bool suppressBrassTrigger = false, lastBrMono = false;
+    bool suppressBrassTrigger = false, lastBrMono = false, lastSynMono = false;
+    std::array<int, 128> sStack {};
+    std::array<float, 128> sVel {};
+    int sCount = 0, sCurrent = -1;
 
     DelayLine stVib;
     double stVibPhase = 0.0;

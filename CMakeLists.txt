@@ -24,6 +24,9 @@ endif()
 # Plugin formats. The standalone app is only for local UI testing (off by default).
 option(TRIDEX_STANDALONE "Also build the standalone app (local testing only)" OFF)
 set(TRIDEX_FORMATS VST3)
+if(APPLE)
+    list(APPEND TRIDEX_FORMATS AU)   # Audio Unit for Logic Pro / GarageBand
+endif()
 if(TRIDEX_STANDALONE)
     list(APPEND TRIDEX_FORMATS Standalone)
 endif()

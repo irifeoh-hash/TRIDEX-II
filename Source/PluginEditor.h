@@ -31,6 +31,14 @@ public:
     void paintButton (juce::Graphics&, bool over, bool down) override;
 };
 
+// Horizontal two-position switch: PORTA (left) / GLISS (right).
+class ModeSwitch : public juce::ToggleButton
+{
+public:
+    juce::Colour accent { 0xffece8de };
+    void paintButton (juce::Graphics&, bool, bool) override;
+};
+
 // Two-position slide switch (ASSIGN MODE 1/2).
 class SlideSwitch : public juce::ToggleButton
 {
@@ -204,6 +212,7 @@ private:
     juce::Slider& switchKnob (const char* id, int cx, int cy, const juce::String& label, bool white);
     tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
     void octave (const char* id, int cx, int y);
+    void modeSwitch (const char* id, int cx, int cy, bool orangeLegend);
     juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,

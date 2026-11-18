@@ -140,6 +140,25 @@ void LedButton::paintButton (juce::Graphics& g, bool over, bool down)
     g.fillEllipse (juce::Rectangle<float> (5, 5).withCentre (ledC));
 }
 
+void ModeSwitch::paintButton (juce::Graphics& g, bool, bool)
+{
+    const auto b = getLocalBounds().toFloat();
+    // Side legends
+    g.setFont (juce::FontOptions (7.5f, juce::Font::bold));
+    g.setColour (getToggleState() ? accent.withAlpha (0.45f) : accent);
+    g.drawText ("PORTA", juce::Rectangle<float> (b.getX(), b.getY(), b.getWidth() * 0.5f, 10.0f), juce::Justification::centred);
+    g.setColour (getToggleState() ? accent : accent.withAlpha (0.45f));
+    g.drawText ("GLISS", juce::Rectangle<float> (b.getCentreX(), b.getY(), b.getWidth() * 0.5f, 10.0f), juce::Justification::centred);
+    // Slot + lever
+    const auto slot = juce::Rectangle<float> (b.getCentreX() - 16.0f, b.getY() + 14.0f, 32.0f, 12.0f);
+    g.setColour (juce::Colours::black);
+    g.fillRoundedRectangle (slot, 3.0f);
+    auto lever = slot.withWidth (slot.getWidth() * 0.5f).reduced (1.0f);
+    if (getToggleState()) lever.setX (slot.getCentreX() + 1.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe2ded4), lever.getX(), lever.getY(), juce::Colour (0xff9e9a90), lever.getX(), lever.getBottom(), false));
+    g.fillRoundedRectangle (lever, 2.0f);
+}
+
 void SlideSwitch::paintButton (juce::Graphics& g, bool, bool)
 {
     const auto b = getLocalBounds().toFloat().reduced (2.0f);
@@ -781,6 +800,18 @@ void TridexPanel::octave (const char* id, int cx, int y)
     text ({ (float) cx - 24, (float) y + 38, 48, 10 }, "OCTAVE", 7.0f);
 }
 
+void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend)
+{
+    auto sw = std::make_unique<tdxui::ModeSwitch>();
+    sw->accent = orangeLegend ? kOrange : kInk;
+    sw->setBounds (cx - 28, cy - 18, 56, 30);
+    sw->setTooltip ("Glide mode: PORTA (smooth slide) / GLISS (semitone steps)");
+    addAndMakeVisible (*sw);
+    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, id, *sw));
+    owned.push_back (std::move (sw));
+    text ({ (float) cx - 32, (float) cy + 16, 64, 11 }, "PORTA / GLISS", 8.0f, false, juce::Justification::centred, orangeLegend ? kOrange : juce::Colour());
+}
+
 void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j, juce::Colour col)
 {
     texts.push_back ({ r, s, size, bold, j, col });
@@ -884,7 +915,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kOrange);
         // Tridex II: glide (portamento / glissando)
         knob ("syn_glide", col (11), kRow1, "GLIDE TIME", true);
-        switchKnob ("syn_gliss", col (11), kRow2, "MODE", true);
+        modeSwitch ("syn_gliss", col (11), kRow2, true);
         moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kOrange);
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
@@ -900,6 +931,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             progBtns[(size_t) i] = &progButton (juce::String (i + 1), bx += 30, kSwY, [this, i] { programPressed (i); });
         text ({ (float) s0 + 80, (float) kSwY + 50, 360, 10 }, "PROGRAMMER", 8.0f, true);
 
+        led ("syn_mono", s0 + 12 * kCol - 180, kSwY, "MONO");
         octave ("syn_octsh", s0 + 12 * kCol - 118, kSwY);
         knob ("syn_vol", s0 + 12 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
         led ("syn_on", s0 + 12 * kCol - 20, kSwY, "OUTPUT");
@@ -942,7 +974,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, kModY, "VCF MODE");
         // Tridex II: glide (portamento / glissando)
         knob ("br_glide", col (7), kRow1, "GLIDE TIME", false);
-        switchKnob ("br_gliss", col (7), kRow2, "MODE", false);
+        modeSwitch ("br_gliss", col (7), kRow2, false);
         moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, kModY, "GLIDE");
         auto [a, b] = sectionEnd (8);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
