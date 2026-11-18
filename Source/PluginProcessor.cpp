@@ -213,6 +213,16 @@ TridexProcessor::TridexProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "TRIDEX", createLayout())
 {
+    for (int i = 0; i < 3; ++i)
+    {
+        const juce::String id ("arp" + juce::String (i + 1)), gid ("sg" + juce::String (i + 1));
+        auto P = [this] (const juce::String& s) { auto* ptr = apvts.getRawParameterValue (s); jassert (ptr != nullptr); return ptr; };
+        arpPtr[(size_t) i] = { P (id + "_on"), P (id + "_mode"), P (id + "_rate"), P (id + "_oct"), P (id + "_gate"), P (id + "_sync") };
+        auto& g = gatePtr[(size_t) i];
+        g.on = P (gid + "_on"); g.sync = P (gid + "_sync"); g.rate = P (gid + "_rate");
+        for (int k = 0; k < 8; ++k) { g.l[(size_t) k] = P (gid + "_l" + juce::String (k + 1)); g.r[(size_t) k] = P (gid + "_r" + juce::String (k + 1)); }
+    }
+
     // Fill the 32 slots from the factory set (defaults + overrides), rest = Init.
     const auto& factory = tdx::factoryPresets();
     for (int i = 0; i < kNumPrograms; ++i)
@@ -288,27 +298,26 @@ void TridexProcessor::syncParams()
     p.ensembleOn = ! on ("ens_off");
 
     p.arpTempo = get ("arp_tempo");
-    const char* arpIds[] = { "arp1", "arp2", "arp3" };
     for (size_t i = 0; i < 3; ++i)
     {
-        const juce::String id (arpIds[i]);
+        const auto& ap = arpPtr[i];
         auto& a = p.arp[i];
-        a.on      = on ((id + "_on").toRawUTF8());
-        a.mode    = idx ((id + "_mode").toRawUTF8());
-        a.rate    = idx ((id + "_rate").toRawUTF8());
-        a.octaves = idx ((id + "_oct").toRawUTF8()) + 1;
-        a.gate    = get ((id + "_gate").toRawUTF8());
-        a.sync    = on ((id + "_sync").toRawUTF8());
+        a.on      = ap.on->load() > 0.5f;
+        a.mode    = (int) ap.mode->load();
+        a.rate    = (int) ap.rate->load();
+        a.octaves = (int) ap.oct->load() + 1;
+        a.gate    = ap.gate->load();
+        a.sync    = ap.sync->load() > 0.5f;
 
-        const juce::String gid ("sg" + juce::String ((int) i + 1));
+        const auto& gp = gatePtr[i];
         auto& g = p.gate[i];
-        g.on   = on ((gid + "_on").toRawUTF8());
-        g.sync = on ((gid + "_sync").toRawUTF8());
-        g.rate = idx ((gid + "_rate").toRawUTF8());
+        g.on   = gp.on->load() > 0.5f;
+        g.sync = gp.sync->load() > 0.5f;
+        g.rate = (int) gp.rate->load();
         for (size_t k = 0; k < 8; ++k)
         {
-            g.left[k]  = on ((gid + "_l" + juce::String ((int) k + 1)).toRawUTF8());
-            g.right[k] = on ((gid + "_r" + juce::String ((int) k + 1)).toRawUTF8());
+            g.left[k]  = gp.l[k]->load() > 0.5f;
+            g.right[k] = gp.r[k]->load() > 0.5f;
         }
     }
 }

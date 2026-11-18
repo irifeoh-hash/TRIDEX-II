@@ -268,6 +268,7 @@ public:
         const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
         const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
+        const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const float brassMixNorm = 1.0f / std::sqrt ((float) brassOscs);
         const double hostQnPerSample = hostBpm / 60.0 / sr;
@@ -477,25 +478,29 @@ public:
             // ---- Flanger on selected sections
             // Routing: chorus-selected parts go through the chorus first; flanger-selected parts
             // (and the chorus output, if any chorused part is also flanger-selected) through the flanger.
+            // Sends are crossfaded (~10 ms) so switching effects or their part selection never clicks.
             float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f, cL = 0.0f, cR = 0.0f;
-            const bool chorusActive = p.chOn && (p.chSynth || p.chBrass || p.chStrings);
-            bool chorusToFlanger = false;
-            const auto route = [&] (bool ch, bool fl, float l, float r)
+            const bool chSel[3] = { p.chSynth, p.chBrass, p.chStrings };
+            const bool flSel[3] = { p.flSynth, p.flBrass, p.flStrings };
+            const float secL[3] = { synth * gl[0], brass * gl[1], sL * gl[2] };
+            const float secR[3] = { synth * gr[0], brass * gr[1], sR * gr[2] };
+            float chWeight = 0.0f, chToFl = 0.0f;
+            for (int s = 0; s < 3; ++s)
             {
-                if (chorusActive && ch) { cL += l; cR += r; chorusToFlanger |= fl; }
-                else if (fl)            { fL += l; fR += r; }
-                else                    { dL += l; dR += r; }
-            };
-            route (p.chSynth,   p.flSynth,   synth * gl[0], synth * gr[0]);
-            route (p.chBrass,   p.flBrass,   brass * gl[1], brass * gr[1]);
-            route (p.chStrings, p.flStrings, sL * gl[2],    sR * gr[2]);
-            if (chorusActive)
-            {
-                chorus.process (cL, cR, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
-                if (chorusToFlanger) { fL += cL; fR += cR; } else { dL += cL; dR += cR; }
+                chSend[(size_t) s] += (((p.chOn && chSel[s]) ? 1.0f : 0.0f) - chSend[(size_t) s]) * sendSmooth;
+                flSend[(size_t) s] += ((flSel[s] ? 1.0f : 0.0f) - flSend[(size_t) s]) * sendSmooth;
+                const float c = chSend[(size_t) s], f = flSend[(size_t) s];
+                cL += secL[s] * c;                    cR += secR[s] * c;
+                fL += secL[s] * (1.0f - c) * f;       fR += secR[s] * (1.0f - c) * f;
+                dL += secL[s] * (1.0f - c) * (1.0f - f); dR += secR[s] * (1.0f - c) * (1.0f - f);
+                chWeight += c; chToFl += c * f;
             }
-            if (p.flSynth || p.flBrass || p.flStrings || chorusToFlanger)
-                flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
+            // Effects always run, so their state is ready the moment they're switched in.
+            chorus.process (cL, cR, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
+            const float toFl = chWeight > 1.0e-4f ? std::clamp (chToFl / chWeight, 0.0f, 1.0f) : 0.0f;
+            fL += cL * toFl;          fR += cR * toFl;
+            dL += cL * (1.0f - toFl); dR += cR * (1.0f - toFl);
+            flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
 
             outL[i] = outputStage (dcL.process (dL + fL) * p.master);
             outR[i] = outputStage (dcR.process (dR + fR) * p.master);
@@ -967,6 +972,7 @@ private:
     std::array<Arp, 3> arps;
     double hostBpm = 120.0, hostPpq = 0.0;
     std::array<double, 3> gateFreeQn {};
+    std::array<float, 3> chSend {}, flSend {};   // crossfaded effect sends per section
     std::array<int, 2> lastNote { -1, -1 };   // last note started in Synth / Brass (glide source)
     std::array<float, 3> gateL { 1.0f, 1.0f, 1.0f }, gateR { 1.0f, 1.0f, 1.0f };
 public:

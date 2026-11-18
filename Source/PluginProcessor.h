@@ -60,6 +60,13 @@ private:
     void applyJoystick();
     float get (const char* id) const { return apvts.getRawParameterValue (id)->load(); }
 
+    // Cached parameter pointers for the per-part arp / step-gate settings (looked up once, so
+    // nothing is allocated on the audio thread).
+    struct ArpPtrs  { std::atomic<float> *on, *mode, *rate, *oct, *gate, *sync; };
+    struct GatePtrs { std::atomic<float> *on, *sync, *rate; std::array<std::atomic<float>*, 8> l, r; };
+    std::array<ArpPtrs, 3> arpPtr {};
+    std::array<GatePtrs, 3> gatePtr {};
+
     tdx::Engine engine;
     std::array<Program, kNumPrograms> programs;
     int currentProgram = 0;
