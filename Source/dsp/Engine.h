@@ -243,6 +243,8 @@ public:
         const int v1Oct = 2 - std::clamp (p.v1Oct, 0, 2);   // footage index -> divider stage (0 = 4' core)
 
         const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
+        const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
+        const float brassMixNorm = 1.0f / std::sqrt ((float) brassOscs);
         const double hostQnPerSample = hostBpm / 60.0 / sr;
         const double freeQnPerSample = std::max (20.0f, p.arpTempo) / 60.0 / sr;
 
@@ -290,7 +292,7 @@ public:
             if (p.v1Wave == Vco1Wave::PWM) pw = 0.5f * (1.0f - p.pwInt * 1.25f * (0.5f + 0.5f * pwmTri));
             pw = std::max (0.0f, pw);
 
-            float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f;
+            float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f, brWeight = 0.0f;
             bool brassGateOpen = false;
 
             for (auto& v : voices)
@@ -338,6 +340,7 @@ public:
                 {
                     const float g = v.brGateEnv.process();
                     brassGateOpen = true;
+                    brWeight += g;
                     const float bpw = brassPulseWidth (p.br1Wave);
                     float b = (p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f);
                     if (p.br2Scale > 0)
@@ -346,12 +349,14 @@ public:
                         const auto ob = v.brVco2.process (midiToHz (s2) * invSr);
                         b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave));
                     }
+                    // Normalise the oscillator stack (16' + 8' + OSC 2) so it doesn't overdrive the filter.
+                    b *= brassMixNorm;
                     if (p.brPolyVcf)
                     {
                         // Own filter per note, half key tracking, swept by the shared brass EG.
                         const float cutOct = p.brCutoff * 10.0f + p.brEgInt * brassEnv.value * 8.0f + 0.5f * ((float) v.pitchNote - 60.0f) / 12.0f;
                         v.brVcf.setCutoff (20.0f * std::exp2 (cutOct), p.brRes);
-                        b = v.brVcf.process (b * 0.3f);
+                        b = v.brVcf.process (b * kBrassIn) * kBrassMakeup;
                     }
                     brSum += b * g * vg;
                     if (! v.brGateEnv.isActive()) v.brVcf.reset();
@@ -374,12 +379,15 @@ public:
             if (brassEnv.isActive() || brassGateOpen)
             {
                 const float e = brassEnv.process();
+                // Voice-count compensation: 1/sqrt(notes sounding), following the gate fades,
+                // so one note and a full chord sit at about the same loudness.
+                const float comp = 1.0f / std::sqrt (std::max (1.0f, brWeight));
                 if (p.brPolyVcf)
-                    brass = brSum * e * p.brVolume;               // already filtered per note
+                    brass = brSum * comp * e * p.brVolume;        // already filtered per note
                 else
                 {
                     brassVcf.setCutoff (20.0f * std::exp2 (p.brCutoff * 10.0f + p.brEgInt * e * 8.0f), p.brRes);
-                    brass = brassVcf.process (brSum * 0.3f) * e * p.brVolume;
+                    brass = brassVcf.process (brSum * comp * kBrassIn) * kBrassMakeup * e * p.brVolume;
                 }
             }
 
@@ -712,6 +720,8 @@ private:
 
     static constexpr float kDelayVibTime = 0.6f;   // fixed on the hardware
     static constexpr float kSynTrim = 0.35f, kStTrim = 0.35f;   // gain staging: sections sit level with brass, with headroom
+    // Brass filter staging: feed the (shared, paraphonic) filter gently, make the level up afterwards.
+    static constexpr float kBrassIn = 0.20f, kBrassMakeup = 2.4f;
     float sr = 44100.0f;
     std::array<Voice, kVoices> voices;
     uint32_t ageCounter = 0;
