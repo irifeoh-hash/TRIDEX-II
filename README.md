@@ -1,9 +1,39 @@
-# Tridex 80
+# TRIDEX II
 
-A VST3 / Standalone instrument modelling the **Korg Trident Mk II** (1980–82),
-built from its service manual (block diagram + KLM board schematics). JUCE 8, C++17.
+**TRIDEX II** is a performing-keyboard instrument plugin by **I Rife**, inspired by the Korg Trident Mk II (1980–82).
+It is available as a VST3 for Windows and as a VST3 and AU for macOS (Apple Silicon and Intel).
+It is built with JUCE 8 and C++17.
 
-![screenshot](docs/screenshot.png)
+![TRIDEX II](docs/screenshot.png)
+
+📖 **[Read the manual](MANUAL.md)**. It covers every section, control and feature.
+
+## Download
+
+Get the latest build from the **[tridex-ii-latest release](../../releases/tag/tridex-ii-latest)**:
+
+- `TridexII-Windows-VST3.zip`: Windows VST3
+- `TridexII-macOS.zip`: macOS VST3 and AU, universal
+
+Install steps are in the [manual](MANUAL.md#1-installing) and in the README inside each zip.
+
+## Features
+
+- **Three sections that share 8 voices**, as on the original:
+  - **SYNTHESIZER**: two divider VCOs, a 4-pole resonant VCF, two ADSRs, and a 32-slot programmer.
+  - **BRASS**: two oscillators, paraphonic (the original) or true polyphonic.
+  - **STRINGS**: ensemble, bowing, vibrato and EQ.
+- **Per-part keyboard split**: L, L+H or H, each part with its own split point, shown in a colour strip above the keys.
+- **Mono modes** for synth and brass: true monophonic with note priority (Last, First, Low, High) and RETRIG or LEGATO, plus PORTA or GLISS glide.
+- **Per-part arpeggiators and L/R step gates**, which can sync to the host.
+- **Effects**:
+  - flanger,
+  - dimension-style chorus and ensemble,
+  - tape and VHS processor (Studio, Cassette, VHS, Worn VHS) with wow, flutter, drift, age, hiss and drive for each part.
+  
+  Each effect has a selector for each part.
+- **Separate outputs**: Main, plus Synthe, Brass and Strings stereo buses.
+- **Performance controls**: joystick (bend, vibrato, trill), delay vibrato, transpose, octave shift for each part, analog drift and optional velocity.
 
 ## Build
 
@@ -12,8 +42,11 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # uses ../JUCE if present, 
 cmake --build build
 ```
 
-Artefacts are written to `build/Tridex80_artefacts/Release/{VST3,Standalone}`.
-To run the headless DSP test (renders WAVs and checks for NaN/silence), use:
+Add `-DTRIDEX_STANDALONE=ON` to also build a standalone app.
+GitHub Actions (`.github/workflows/build.yml`) builds Windows (MSVC) and macOS (Xcode, universal) on every push,
+and publishes the zips to the `tridex-ii-latest` release.
+
+To run the headless DSP test, which renders WAVs and checks levels, NaN and silence:
 `g++ -std=c++17 -O2 -ISource tests/render_test.cpp -o rt && ./rt /tmp`
 
 ## How the circuit maps to code
@@ -29,29 +62,19 @@ To run the headless DSP test (renders WAVs and checks for NaN/silence), use:
 | KLM-401 MG: joystick X = bend, Y+ = vibrato, Y− = trill; delay vibrato; flanger with per-section select | MG block plus `Flanger` |
 
 MIDI: pitch bend = joystick X, CC1 = joystick Y+ (vibrato), CC2 = joystick Y− (trill),
-CC64 = foot switch (hold, or Trident-style release switch for Auto Damp).
+CC64 = foot switch (Off, Damper/Auto Damp release switch, or Hold).
 
-## Not yet verified against hardware (best interpretations)
+## Modelling notes (best interpretations, not verified against hardware)
 
-- **Auto Damp:** modelled as "release tails cut unless the release foot switch is down" (from the RELEASE/AUTO DAMP NOR gating on KLM-378).
-- **Assign Mode 1/2:** modelled as rotating vs. same-voice/lowest-free assignment.
-- **Brass "Trigger Select" and "Silence Note (2,4,6,8)":** not implemented yet; their function is unclear from the schematics alone.
-- **Bowing (Level, Tone):** modelled as a band-passed, per-note attack transient.
-- **Compressor/expander:** omitted, since it is a BBD noise-reduction compander and is ideally transparent.
-- **Component values** for the divider summing weights, EG curves and filter scaling are approximations; calibration against a real unit or recordings is still to do.
-- Separate per-section outputs (the hardware has them) are not yet exposed as plugin buses.
+- **Auto Damp:** a new note cuts released tails unless the Damper (S-1) pedal is down.
+- **Assign Mode 1/2:** modelled as rotating assignment vs. same-voice/lowest-free assignment.
+- **Brass Trigger Select / Silence Note:** the brass EG fires only once 2, 4, 6 or 8 keys are held.
+- **Bowing:** a band-passed attack transient for each note.
+- **Compander:** omitted. It is BBD noise reduction and is ideally transparent.
+- Component values (divider weights, EG curves, filter scaling) are approximations.
 
-Trident and Korg are trademarks of Korg Inc. This project is not affiliated with or endorsed by Korg.
+## Credits and legal
 
-## Windows build (cross-compiled from Linux)
-
-A prebuilt Windows zip is produced with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw):
-
-```bash
-git -C ../JUCE apply "$PWD/cmake/juce-8.0.4-mingw.patch"      # two small MinGW fixes to JUCE 8.0.4
-cmake -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DLLVM_MINGW_ROOT=/path/to/llvm-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw-x86_64.cmake
-cmake --build build-win --target Tridex80_VST3 Tridex80_Standalone
-```
-
-Building natively on Windows with Visual Studio needs none of this (see `.github/workflows/build.yml`).
+TRIDEX II is designed by I Rife ([instagram.com/irife](https://www.instagram.com/irife)).
+The I Rife logo is © I Rife. All rights reserved.
+Korg and Trident are trademarks of Korg Inc. This independent project is not affiliated with or endorsed by Korg.
