@@ -97,6 +97,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "v2_scale",  "VCO2 Octave", { "Off", "16'", "8'", "4'" }, 2);
     addF (l, "v2_detune", "VCO2 Detune", NR (-50.0f, 50.0f), 6.0f, "ct");
     addC (l, "v2_wave",   "VCO2 Waveform", { "Saw", "PW", "PWM" }, 0);
+    addF (l, "vco_mix",   "VCO Mix", unit, 0.5f);
     addF (l, "cutoff",    "Cutoff Freq", unit, 0.6f);
     addF (l, "res",       "Resonance", unit, 0.15f);
     addF (l, "eg_int",    "EG Intensity", bip, 0.2f);
@@ -126,6 +127,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "br2_oct",   "Brass OSC2 Octave", { "Off", "16'", "8'", "4'" }, 0);
     addC (l, "br2_wave",  "Brass OSC2 Waveform", { "Saw", "Square", "Pulse" }, 0);
     addF (l, "br2_detune","Brass OSC2 Detune", NR (-50.0f, 50.0f), 7.0f, "ct");
+    addF (l, "br_oscmix", "Brass OSC Mix", unit, 0.5f);
     addF (l, "br_cutoff", "Brass Cutoff Freq", unit, 0.4f);
     addF (l, "br_res",    "Brass Resonance", unit, 0.1f);
     addF (l, "br_egint",  "Brass EG Intensity", unit, 0.5f);
@@ -202,7 +204,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
 const juce::StringArray& TridexProcessor::programmableIds()
 {
     // Items marked * in the spec sheet: VCO1, VCO2, VCF, VCF EG, VCA attenuator, VCA EG, Auto Damp.
-    static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune", "v2_wave",
+    static const juce::StringArray ids { "v1_oct", "v1_wave", "pw_int", "pwm_speed", "v2_scale", "v2_detune", "v2_wave", "vco_mix",
                                          "cutoff", "res", "eg_int", "kbd_track",
                                          "sf_a", "sf_d", "sf_s", "sf_r", "sa_a", "sa_d", "sa_s", "sa_r",
                                          "vca_att", "auto_damp", "syn_glide", "syn_gliss", "syn_mono", "syn_legato" };
@@ -283,7 +285,7 @@ void TridexProcessor::syncParams()
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));
     p.pwInt = get ("pw_int"); p.pwmSpeed = get ("pwm_speed");
-    p.v2Scale = idx ("v2_scale"); p.v2Detune = get ("v2_detune"); p.v2Wave = static_cast<tdx::Vco1Wave> (idx ("v2_wave"));
+    p.v2Scale = idx ("v2_scale"); p.v2Detune = get ("v2_detune"); p.v2Wave = static_cast<tdx::Vco1Wave> (idx ("v2_wave")); p.vcoMix = get ("vco_mix");
     p.cutoff = get ("cutoff"); p.res = get ("res"); p.egInt = get ("eg_int"); p.kbdTrack = idx ("kbd_track");
     p.sfA = get ("sf_a"); p.sfD = get ("sf_d"); p.sfS = get ("sf_s"); p.sfR = get ("sf_r");
     p.saA = get ("sa_a"); p.saD = get ("sa_d"); p.saS = get ("sa_s"); p.saR = get ("sa_r");
@@ -291,7 +293,7 @@ void TridexProcessor::syncParams()
 
     p.brOn = on ("br_on"); p.brZone = zone ("br_zone"); p.brVolume = get ("br_vol");
     p.br16 = on ("br_16"); p.br8 = on ("br_8"); p.br1Wave = idx ("br_wave");
-    p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune");
+    p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune"); p.brOscMix = get ("br_oscmix");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
     p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf"); p.brPoly = on ("br_poly");

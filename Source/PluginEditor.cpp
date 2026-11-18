@@ -1112,6 +1112,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         switchKnob ("v2_scale", col (2), kRow1, "OCTAVE", true);
         switchKnob ("v2_wave", col (3), kRow1, "WAVEFORM", true);
         knob ("v2_detune", col (2), kRow2, "DETUNE", true);
+        knob ("vco_mix", col (3), kRow2, "VCO MIX", true);
         moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kOrange);
 
         knob ("cutoff", col (4), kRow1, "CUTOFF FREQ", true);
@@ -1174,18 +1175,19 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         switchKnob ("br2_oct", col (0), (kRow2 + kTier), "OSC 2 OCTAVE", false);
         switchKnob ("br2_wave", col (1), (kRow1 + kTier), "OSC 2 WAVE", false);
         knob ("br2_detune", col (1), (kRow2 + kTier), "DETUNE", false);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, (kModY + kTier), "OSCILLATORS");
+        knob ("br_oscmix", col (2), (kRow1 + kTier), "OSC MIX", false);
+        moduleLabel ((float) s0, (float) s0 + 3 * kCol, (kModY + kTier), "OSCILLATORS");
 
-        knob ("br_cutoff", col (2), (kRow1 + kTier), "CUTOFF FREQ", false);
-        knob ("br_res", col (3), (kRow1 + kTier), "RESONANCE", false);
-        knob ("br_a", col (4), (kRow1 + kTier), "ATTACK", false);
-        knob ("br_d", col (5), (kRow1 + kTier), "DECAY", false);
-        switchKnob ("br_silence", col (2), (kRow2 + kTier), "SILENCE NOTE", false);
-        knob ("br_egint", col (3), (kRow2 + kTier), "EG INTENSITY", false);
-        knob ("br_s", col (4), (kRow2 + kTier), "SUSTAIN", false);
-        knob ("br_r", col (5), (kRow2 + kTier), "RELEASE", false);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, (kModY + kTier), "VCF");
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, (kModY + kTier), "EG");
+        knob ("br_cutoff", col (3), (kRow1 + kTier), "CUTOFF FREQ", false);
+        knob ("br_res", col (4), (kRow1 + kTier), "RESONANCE", false);
+        knob ("br_a", col (5), (kRow1 + kTier), "ATTACK", false);
+        knob ("br_d", col (6), (kRow1 + kTier), "DECAY", false);
+        switchKnob ("br_silence", col (3), (kRow2 + kTier), "SILENCE NOTE", false);
+        knob ("br_egint", col (4), (kRow2 + kTier), "EG INTENSITY", false);
+        knob ("br_s", col (5), (kRow2 + kTier), "SUSTAIN", false);
+        knob ("br_r", col (6), (kRow2 + kTier), "RELEASE", false);
+        moduleLabel ((float) s0 + 3 * kCol, (float) s0 + 5 * kCol, (kModY + kTier), "VCF");
+        moduleLabel ((float) s0 + 5 * kCol, (float) s0 + 7 * kCol, (kModY + kTier), "EG");
 
         knob ("br_vol", s0 + 20, (kSwY + kTier) + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
@@ -1196,18 +1198,18 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("br_tsel", bx += 42, (kSwY + kTier), "TRIGGER SELECT");
         octave ("br_octsh", bx += 46, (kSwY + kTier));
         // Tridex II: per-note brass filter switch
-        led ("br_polyvcf", col (6), (kRow1 + kTier) - 22, "POLY VCF");
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, (kModY + kTier), "VOICING");
-        modeSwitch ("br_poly", col (6), (kRow2 + kTier), false, "PARA", "POLY");
+        led ("br_polyvcf", col (7), (kRow1 + kTier) - 22, "POLY VCF");
+        moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, (kModY + kTier), "VOICING");
+        modeSwitch ("br_poly", col (7), (kRow2 + kTier), false, "PARA", "POLY");
         // Tridex II: glide (portamento / glissando)
-        knob ("br_glide", col (7), (kRow1 + kTier), "GLIDE TIME", false);
-        modeSwitch ("br_gliss", col (7), (kRow2 + kTier), false);
+        knob ("br_glide", col (8), (kRow1 + kTier), "GLIDE TIME", false);
+        modeSwitch ("br_gliss", col (8), (kRow2 + kTier), false);
         // Tridex II: MONO column (MONO on/off + RETRIG / LEGATO)
-        led ("br_mono", col (8), (kRow1 + kTier) - 22, "MONO");
-        modeSwitch ("br_legato", col (8), (kRow2 + kTier), false, "RETRIG", "LEGATO");
-        moduleLabel ((float) s0 + 8 * kCol, (float) s0 + 9 * kCol, (kModY + kTier), "MONO");
-        moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, (kModY + kTier), "GLIDE");
-        auto [a, b] = sectionEnd (9);
+        led ("br_mono", col (9), (kRow1 + kTier) - 22, "MONO");
+        modeSwitch ("br_legato", col (9), (kRow2 + kTier), false, "RETRIG", "LEGATO");
+        moduleLabel ((float) s0 + 9 * kCol, (float) s0 + 10 * kCol, (kModY + kTier), "MONO");
+        moduleLabel ((float) s0 + 8 * kCol, (float) s0 + 9 * kCol, (kModY + kTier), "GLIDE");
+        auto [a, b] = sectionEnd (10);
         sectionBar ((float) a, (float) b, (kBarY + kTier), "BRASS");
     }
 

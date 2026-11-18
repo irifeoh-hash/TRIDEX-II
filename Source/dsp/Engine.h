@@ -46,6 +46,7 @@ struct Params
     int v1Oct = 1; Vco1Wave v1Wave = Vco1Wave::Saw; float pwInt = 0.3f, pwmSpeed = 1.0f;
     int v2Scale = 2; float v2Detune = 6.0f;            // v2Scale: 0 Off, 1 16', 2 8', 3 4'
     Vco1Wave v2Wave = Vco1Wave::Saw;                    // VCO2 waveform (shares PW/PWM settings with VCO1)
+    float vcoMix = 0.5f;                                // Tridex II: VCO1 <-> VCO2 balance (0.5 = both full)
     float cutoff = 0.6f, res = 0.15f, egInt = 0.3f; int kbdTrack = 2;
     float sfA = 0.01f, sfD = 0.6f, sfS = 0.4f, sfR = 0.4f;
     float saA = 0.005f, saD = 0.5f, saS = 0.8f, saR = 0.4f;
@@ -56,6 +57,7 @@ struct Params
     bool br16 = false, br8 = true;                      // OSC 1 footages
     int br1Wave = 0;                                    // OSC 1 wave: 0 Saw, 1 Square, 2 Pulse
     int br2Scale = 0, br2Wave = 0; float br2Detune = 7.0f;   // OSC 2: 0 Off, 1 16', 2 8', 3 4'
+    float brOscMix = 0.5f;                              // Tridex II: OSC1 <-> OSC2 balance (0.5 = both full)
     float brCutoff = 0.4f, brRes = 0.1f, brEgInt = 0.5f;
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
@@ -273,6 +275,9 @@ public:
         const int v1Oct = 2 - std::clamp (p.v1Oct, 0, 2);   // footage index -> divider stage (0 = 4' core)
 
         const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
+        // Oscillator MIX: centre = both oscillators at full level; towards an end the other one fades out.
+        const float vcoG1 = std::min (1.0f, 2.0f * (1.0f - p.vcoMix)), vcoG2 = std::min (1.0f, 2.0f * p.vcoMix);
+        const float brG1 = std::min (1.0f, 2.0f * (1.0f - p.brOscMix)), brG2 = std::min (1.0f, 2.0f * p.brOscMix);
         const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
@@ -374,7 +379,7 @@ public:
                     const float ae = v.vcaSlew;
                     const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.pitchNote - 60.0f) / 12.0f;
                     v.vcf.setCutoff (20.0f * std::exp2 (cutOct), p.res);
-                    synSum += v.vcf.process ((osc1 + osc2) * 0.35f) * ae * attenGain * vg;
+                    synSum += v.vcf.process ((osc1 * vcoG1 + osc2 * vcoG2) * 0.35f) * ae * attenGain * vg;
                     if (! v.aenv.isActive()) v.vcf.reset();
                 }
 
@@ -385,12 +390,12 @@ public:
                     brassGateOpen = true;
                     brWeight += g * fg;
                     const float bpw = brassPulseWidth (p.br1Wave);
-                    float b = (p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f);
+                    float b = ((p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f)) * brG1;
                     if (p.br2Scale > 0)
                     {
                         const float s2 = semis + (p.br2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f;
                         const auto ob = v.brVco2.process (midiToHz (s2) * invSr);
-                        b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave));
+                        b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave)) * brG2;
                     }
                     // Normalise the oscillator stack (16' + 8' + OSC 2) so it doesn't overdrive the filter.
                     b *= brassMixNorm;
