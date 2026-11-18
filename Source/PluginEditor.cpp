@@ -623,7 +623,7 @@ void AboutPage::paint (juce::Graphics& g)
         "paraphonic brass, three-phase string ensemble) and grew into a modern instrument: "
         "two-oscillator synth and brass with glide, true mono and paraphonic or polyphonic brass, "
         "per-part arpeggiators and step gates synced to your DAW, a chorus with a dimension-style "
-        "SPACE mode, per-part octave and split controls, 32 program memories and separate outputs.\n\n"
+        "SPACE mode, a tape / VHS processor, per-part octave and split controls, 32 program memories and separate outputs.\n\n"
         "Designed and produced by I Rife.";
     g.setColour (kInk);
     g.setFont (juce::FontOptions (15.0f, juce::Font::bold));

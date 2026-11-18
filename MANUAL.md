@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/tridex-ii-logo.png" width="640" alt="TRIDEX II"></p>
+
 # TRIDEX II — Owner's Manual
 
 TRIDEX II is a performing-keyboard instrument plugin (VST3 on Windows and macOS, plus AU on macOS),

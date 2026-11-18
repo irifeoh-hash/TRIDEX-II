@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/tridex-ii-logo.png" width="640" alt="TRIDEX II"></p>
+
 # TRIDEX II
 
 **TRIDEX II** is a performing-keyboard instrument plugin by **I Rife**, inspired by the Korg Trident Mk II (1980–82).
