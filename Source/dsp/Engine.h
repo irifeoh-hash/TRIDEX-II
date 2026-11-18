@@ -56,11 +56,13 @@ struct Params
     float brA = 0.08f, brD = 0.5f, brS = 0.7f, brR = 0.3f;
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
+    bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
 
     // ---- Strings section
     bool stOn = false; Zone stZone = Zone::Both; float stVolume = 0.6f;
     bool st16 = false, st8 = true, st4 = true;
     float stAttack = 0.15f, stRelease = 0.8f, kbdBalance = 0.0f;   // kbdBalance 0..1 (key-tracked filter amount)
+    float stCutoff = 1.0f, stRes = 0.0f;               // Tridex II: strings VCF (1.0 = fully open)
     float eqLow = 0.0f, eqHigh = 0.0f;                 // panel scale -5..+5
     bool bowOn = false; float bowLevel = 0.5f, bowTone = 0.5f;
     bool vibOn = true; float vibDelay = 0.5f, vibIntensity = 0.4f, vibSpeed = 5.5f;
@@ -118,6 +120,7 @@ struct Voice
 
     DividerVco vco1, vco2, brVco2;   // brVco2: brass section OSC 2
     Ladder vcf;
+    Ladder brVcf;                // Tridex II: per-note brass filter (POLY VCF mode)
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
     bool brCut = false;          // brass gate being cut quickly (mono note change)
@@ -140,7 +143,8 @@ public:
         for (auto& v : voices)
         {
             v = Voice {};
-            v.vcf.prepare (sr); v.vcf.compensation = 1.0f;   // manual's response graph: flat passband as resonance rises
+            v.vcf.prepare (sr); v.vcf.compensation = 0.6f;   // mostly flat passband (manual's graph), less boom
+            v.brVcf.prepare (sr);
             v.fenv.prepare (sr); v.aenv.prepare (sr);
             v.driftCents = r.bipolar() * 3.0f;
             v.v2Offset = r.bipolar() * 2.0f;
@@ -150,7 +154,8 @@ public:
             v.brVco2.phase = 0.5 * (r.bipolar() + 1.0);
             v.brVco2.mis8 = r.bipolar() * 0.02f; v.brVco2.mis16 = r.bipolar() * 0.02f;
         }
-        brassVcf.prepare (sr); brassVcf.compensation = 1.0f; brassEnv.prepare (sr);
+        brassVcf.prepare (sr); brassEnv.prepare (sr);
+        stringsVcfL.prepare (sr); stringsVcfR.prepare (sr);
         stVib.prepare (0.03f, sr);
         ensemble.prepare (sr);
         flanger.prepare (sr);
@@ -328,7 +333,15 @@ public:
                         const auto ob = v.brVco2.process (midiToHz (s2) * invSr);
                         b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave));
                     }
+                    if (p.brPolyVcf)
+                    {
+                        // Own filter per note, half key tracking, swept by the shared brass EG.
+                        const float cutOct = p.brCutoff * 10.0f + p.brEgInt * brassEnv.value * 8.0f + 0.5f * ((float) v.note - 60.0f) / 12.0f;
+                        v.brVcf.setCutoff (20.0f * std::exp2 (cutOct), p.brRes);
+                        b = v.brVcf.process (b * 0.3f);
+                    }
                     brSum += b * g * v.velocity;
+                    if (! v.brGateEnv.isActive()) v.brVcf.reset();
                 }
 
                 // ---- Strings per-voice (KLM-384): KBD balance + AR VCA
@@ -348,8 +361,13 @@ public:
             if (brassEnv.isActive() || brassGateOpen)
             {
                 const float e = brassEnv.process();
-                brassVcf.setCutoff (20.0f * std::exp2 (p.brCutoff * 10.0f + p.brEgInt * e * 8.0f), p.brRes);
-                brass = brassVcf.process (brSum * 0.3f) * e * p.brVolume;
+                if (p.brPolyVcf)
+                    brass = brSum * e * p.brVolume;               // already filtered per note
+                else
+                {
+                    brassVcf.setCutoff (20.0f * std::exp2 (p.brCutoff * 10.0f + p.brEgInt * e * 8.0f), p.brRes);
+                    brass = brassVcf.process (brSum * 0.3f) * e * p.brVolume;
+                }
             }
 
             // ---- Strings chain (KLM-404)
@@ -368,6 +386,13 @@ public:
             {
                 const float b = bowBp.process (bowSum * 0.22f) * p.bowLevel * 2.0f;
                 sL += b; sR += b;
+            }
+            if (p.stCutoff < 0.999f || p.stRes > 0.001f)
+            {
+                // Strings VCF (Tridex II), after the ensemble so it shapes the whole section.
+                const float hz = 20.0f * std::exp2 (p.stCutoff * 10.0f);
+                stringsVcfL.setCutoff (hz, p.stRes); stringsVcfR.setCutoff (hz, p.stRes);
+                sL = stringsVcfL.process (sL); sR = stringsVcfR.process (sR);
             }
             sL = eqHiL.process (eqLoL.process (sL)) * p.stVolume;
             sR = eqHiR.process (eqLoR.process (sR)) * p.stVolume;
@@ -653,7 +678,7 @@ private:
     uint32_t ageCounter = 0;
     int nextVoice = 0;
 
-    Ladder brassVcf;
+    Ladder brassVcf, stringsVcfL, stringsVcfR;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;
     std::array<int, 128> monoStack {};

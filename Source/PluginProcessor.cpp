@@ -115,6 +115,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "br_multi",  "Multiple Trigger", false);
     addB (l, "br_tsel",   "Trigger Select", false);
     addB (l, "br_mono",   "Brass Mono", false);
+    addB (l, "br_polyvcf","Brass Poly VCF", false);
     addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
 
     // ---- Strings section
@@ -127,6 +128,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "st_attack",  "Strings Attack",  timeRange (15.0f), 0.15f, "s");
     addF (l, "st_release", "Strings Release", timeRange (15.0f), 0.8f, "s");
     addF (l, "st_balance", "KBD Balance", unit, 0.0f);
+    addF (l, "st_cutoff",  "Strings Cutoff Freq", unit, 1.0f);
+    addF (l, "st_res",     "Strings Resonance", unit, 0.0f);
     addF (l, "st_eq_hi",   "Equalizer High", eq, 0.0f);
     addF (l, "st_eq_lo",   "Equalizer Low", eq, 0.0f);
     addB (l, "bow_on",     "Bowing", false);
@@ -228,11 +231,12 @@ void TridexProcessor::syncParams()
     p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
-    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.silenceNote = idx ("br_silence");
+    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf"); p.silenceNote = idx ("br_silence");
 
     p.stOn = on ("st_on"); p.stZone = zone ("st_zone"); p.stVolume = get ("st_vol");
     p.st16 = on ("st_16"); p.st8 = on ("st_8"); p.st4 = on ("st_4");
     p.stAttack = get ("st_attack"); p.stRelease = get ("st_release"); p.kbdBalance = get ("st_balance");
+    p.stCutoff = get ("st_cutoff"); p.stRes = get ("st_res");
     p.eqLow = get ("st_eq_lo"); p.eqHigh = get ("st_eq_hi");
     p.bowOn = on ("bow_on"); p.bowLevel = get ("bow_level"); p.bowTone = get ("bow_tone");
     p.vibOn = ! on ("svib_off"); p.vibDelay = get ("svib_delay"); p.vibIntensity = get ("svib_int"); p.vibSpeed = get ("svib_speed");

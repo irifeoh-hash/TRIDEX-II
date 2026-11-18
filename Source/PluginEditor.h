@@ -129,7 +129,7 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 1792, kH = 510;
+    static constexpr int kW = 1850, kH = 510;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;

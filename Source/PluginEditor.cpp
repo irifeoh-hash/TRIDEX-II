@@ -661,7 +661,10 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("br_tsel", bx += 42, kSwY, "TRIGGER SELECT");
         led ("br_mono", bx += 42, kSwY, "MONO");
         octave ("br_octsh", bx += 46, kSwY);
-        auto [a, b] = sectionEnd (6);
+        // Tridex II: per-note brass filter switch
+        led ("br_polyvcf", col (6), kRow1 - 22, "POLY VCF");
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, kModY, "VCF MODE");
+        auto [a, b] = sectionEnd (7);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
     }
 
@@ -683,6 +686,10 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 3 * kCol, kModY, "BOWING");
         moduleLabel ((float) s0 + 3 * kCol, (float) s0 + 4 * kCol, kModY, "VIBRATO");
         moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 5 * kCol, kModY, "FILTER");
+        // Tridex II: strings VCF
+        knob ("st_cutoff", col (5), kRow1, "CUTOFF FREQ", false);
+        knob ("st_res", col (5), kRow2, "RESONANCE", false);
+        moduleLabel ((float) s0 + 5 * kCol, (float) s0 + 6 * kCol, kModY, "VCF");
 
         knob ("st_vol", s0 + 20, kSwY + 18, "VOLUME", false, 30);
         int bx = s0 + 54;

@@ -52,6 +52,8 @@ int main (int argc, char** argv)
     fails += render ("brass_mono", mono, out);
     tdx::Params oct; oct.brOn = oct.stOn = true; oct.octShift = { 1, -1, 2 }; oct.brMono = true; oct.arp[2].on = true;
     fails += render ("oct_shift", oct, out);
+    tdx::Params flt; flt.brOn = flt.stOn = true; flt.brPolyVcf = true; flt.brRes = 0.9f; flt.stCutoff = 0.55f; flt.stRes = 0.8f; flt.res = 1.0f;
+    fails += render ("filters", flt, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

@@ -127,35 +127,53 @@ private:
 };
 
 //==============================================================================
-// Zero-delay-feedback 4-pole (24 dB/oct) OTA-style low-pass with saturating
-// feedback path. Resonance 0..1, self-oscillates near 1.
+// Smooth 4-pole (24 dB/oct) low-pass, zero-delay-feedback ladder.
+//  - 2x oversampled internally (no aliasing from the saturation).
+//  - Gentle saturation on every stage, like a transistor/OTA ladder rounding off,
+//    instead of one hard clip at the input.
+//  - Partial passband compensation and a softened resonance curve.
+// Resonance 0..1; self-oscillates gently near 1.
 struct Ladder
 {
     void prepare (double sampleRate) { sr = (float) sampleRate; reset(); }
-    void reset() { s.fill (0.0f); }
+    void reset() { s.fill (0.0f); xPrev = 0.0f; }
 
     void setCutoff (float hz, float res)
     {
         hz = std::clamp (hz, 10.0f, sr * 0.45f);
-        g = std::tan (kPi * hz / sr);
+        g = std::tan (kPi * hz / (2.0f * sr));     // coefficients at the 2x rate
         G = g / (1.0f + g);
-        k = 4.2f * std::clamp (res, 0.0f, 1.0f);
+        res = std::clamp (res, 0.0f, 1.0f);
+        k = 3.95f * (res * (1.25f - 0.25f * res));  // eases in, so the top of the knob is less shrill
     }
 
     float process (float x)
     {
-        // Solve the feedback loop linearly, then saturate the input stage.
+        // 2x oversampling: linear-interpolated input, averaged (decimated) output.
+        const float a = step (0.5f * (x + xPrev));
+        const float b = step (x);
+        xPrev = x;
+        return 0.5f * (a + b);
+    }
+
+    float compensation = 0.6f;   // 0 = classic bass loss with resonance, 1 = flat passband
+    float drive = 0.8f;          // saturation amount per stage
+
+private:
+    float sat (float v) const { return softClip (v * drive) / drive; }
+
+    float step (float x)
+    {
+        // Linear ZDF estimate of the feedback, then saturating stages.
         const float inv = 1.0f / (1.0f + g);
-        const float S = G * G * G * s[0] * inv + G * G * s[1] * inv + G * s[2] * inv + s[3] * inv;
+        const float S = (G * G * G * s[0] + G * G * s[1] + G * s[2] + s[3]) * inv;
         const float G4 = G * G * G * G;
         const float y4est = (G4 * x + S) / (1.0f + k * G4);
 
-        // Passband gain compensation so resonance doesn't hollow out the bass.
-        float u = softClip ((x * (1.0f + compensation * k)) - k * y4est);
-
+        float u = sat (x * (1.0f + compensation * k) - k * y4est);
         for (auto& st : s)
         {
-            const float v = (u - st) * G;
+            const float v = (sat (u) - st) * G;
             const float y = v + st;
             st = y + v;
             u = y;
@@ -163,11 +181,8 @@ struct Ladder
         return u;
     }
 
-    float compensation = 0.5f;
-
-private:
     std::array<float, 4> s {};
-    float sr = 44100.0f, g = 0.5f, G = 0.33f, k = 0.0f;
+    float sr = 44100.0f, g = 0.5f, G = 0.33f, k = 0.0f, xPrev = 0.0f;
 };
 
 //==============================================================================
