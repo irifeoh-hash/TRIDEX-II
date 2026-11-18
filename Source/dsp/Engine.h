@@ -38,6 +38,10 @@ struct Params
     float flManual = 0.4f, flIntensity = 0.5f, flFeedback = 0.4f, flSpeed = 0.3f;
     bool chOn = false, chSynth = true, chBrass = false, chStrings = false;   // Tridex II chorus / ensemble
     int chMode = 0, chSpace = 1; float chRate = 0.6f, chDepth = 0.5f, chMix = 0.5f, chWidth = 0.7f, chTone = 0.6f;
+    bool tpOn = false, tpSynth = true, tpBrass = true, tpStrings = true;      // Tridex II tape / VHS
+    int tpType = 1;                                                            // 0 Studio, 1 Cassette, 2 VHS, 3 Worn VHS
+    std::array<float, 3> tpDrive { 0.3f, 0.3f, 0.3f };                         // saturation per part
+    float tpWow = 0.3f, tpFlutter = 0.2f, tpSpeed = 1.0f, tpDrift = 0.3f, tpAge = 0.3f, tpHiss = 0.1f, tpMix = 1.0f;
     float drift = 0.3f, velSens = 0.0f;
     int pedalMode = 2;                                  // 0 = off, 1 = damper (S-1, Trident), 2 = hold (modern sustain)
 
@@ -191,6 +195,7 @@ public:
         ensemble.prepare (sr);
         for (auto& f : flangers) f.prepare (sr);
         for (auto& c : choruses) c.prepare (sr);
+        for (auto& t : tapes) t.prepare (sr);
         for (auto& d : dcPL) d = {};
         for (auto& d : dcPR) d = {};
         for (auto* d : { &dcL, &dcR }) *d = {};
@@ -542,6 +547,13 @@ public:
                 float fl = xl, fr = xr;
                 flangers[(size_t) s].process (fl, fr, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
                 xl += (fl - xl) * f;  xr += (fr - xr) * f;
+                // Tape at the end of the part's chain (crossfaded in like the other effects)
+                const bool tpSel[3] = { p.tpSynth, p.tpBrass, p.tpStrings };
+                tpSend[(size_t) s] += (((p.tpOn && tpSel[s]) ? 1.0f : 0.0f) - tpSend[(size_t) s]) * sendSmooth;
+                float tl = xl, tr = xr;
+                tapes[(size_t) s].process (tl, tr, p.tpType, p.tpDrive[(size_t) s], p.tpWow, p.tpFlutter, p.tpSpeed,
+                                           p.tpDrift, p.tpAge, p.tpHiss, p.tpMix);
+                xl += (tl - xl) * tpSend[(size_t) s];  xr += (tr - xr) * tpSend[(size_t) s];
 
                 mixL += xl; mixR += xr;
                 if (partL != nullptr && partL[s] != nullptr)
@@ -1019,6 +1031,7 @@ private:
     Ensemble ensemble;
     std::array<Flanger, 3> flangers;          // one per part (same settings), for separate outputs
     std::array<StereoChorus, 3> choruses;
+    std::array<TapeFx, 3> tapes;
 
     std::array<bool, 128> held {}, sustained {};
     std::array<uint8_t, 128> keyMask {}, arpMask {};   // per held key: sections played directly / via arp
@@ -1026,7 +1039,7 @@ private:
     std::array<Arp, 3> arps;
     double hostBpm = 120.0, hostPpq = 0.0;
     std::array<double, 3> gateFreeQn {};
-    std::array<float, 3> chSend {}, flSend {};   // crossfaded effect sends per section
+    std::array<float, 3> chSend {}, flSend {}, tpSend {};   // crossfaded effect sends per section
     float vibMix = 1.0f, ensMix = 1.0f;          // crossfaded strings vibrato / ensemble
     std::array<int, 2> lastNote { -1, -1 };   // last note started in Synth / Brass (glide source)
     std::array<float, 3> gateL { 1.0f, 1.0f, 1.0f }, gateR { 1.0f, 1.0f, 1.0f };

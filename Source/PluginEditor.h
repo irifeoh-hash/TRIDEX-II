@@ -83,6 +83,7 @@ class OctaveControl : public juce::Component, public juce::SettableTooltipClient
 public:
     OctaveControl (juce::RangedAudioParameter& p);
     void paint (juce::Graphics&) override;
+    juce::Colour colour { 0xffff3a2a };   // part colour
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
 
@@ -174,6 +175,25 @@ public:
     std::function<void()> onClick;
     LogoHotspot() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
     void mouseUp (const juce::MouseEvent& e) override { if (onClick && getLocalBounds().contains (e.getPosition())) onClick(); }
+};
+
+// TAPE page: tape / VHS processor; opened/closed with the TAPE button in the top bar.
+class TapePage : public juce::Component
+{
+public:
+    explicit TapePage (juce::AudioProcessorValueTreeState& state);
+    void paint (juce::Graphics&) override;
+
+private:
+    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r, const juce::String& label);
+    LedButton& led (const juce::String& id, juce::Rectangle<int> r, const juce::String& label, juce::Colour cap);
+    juce::AudioProcessorValueTreeState& apvts;
+    std::vector<std::unique_ptr<juce::Component>> comps;
+    std::vector<std::pair<juce::Component*, juce::String>> labels;
+    juce::Rectangle<int> card;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
 };
 
 // CHORUS page: overlays the control section; opened/closed with the CHORUS button in the top bar.
@@ -296,6 +316,8 @@ private:
     tdxui::LedButton* chorusBtn = nullptr;
     std::unique_ptr<tdxui::ChorusPage> chorusPage;
     std::unique_ptr<tdxui::AboutPage> aboutPage;
+    std::unique_ptr<tdxui::TapePage> tapePage;
+    tdxui::LedButton* tapeBtn = nullptr;
     std::unique_ptr<tdxui::LogoHotspot> logoHotspot;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;

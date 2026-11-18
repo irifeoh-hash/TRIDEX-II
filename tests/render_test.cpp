@@ -66,6 +66,8 @@ int main (int argc, char** argv)
         cp.chSpace = 3; fails += render (m == 0 ? "chorus1" : (m == 1 ? "chorus2" : (m == 2 ? "ensemble" : "space")), cp, out); }
     tdx::Params bp; bp.synOn = false; bp.brOn = true; bp.brPoly = true; bp.br2Scale = 2; fails += render ("brass_poly", bp, out);
     tdx::Params bpm = bp; bpm.brMono = true; fails += render ("brass_poly_mono", bpm, out);
+    for (int ty = 0; ty < 4; ++ty) { tdx::Params tp; tp.brOn = tp.stOn = true; tp.tpOn = true; tp.tpType = ty; tp.tpWow = 1.0f; tp.tpDrift = 1.0f;
+        tp.tpDrive = { 1.0f, 0.5f, 0.0f }; tp.tpHiss = 0.5f; tp.tpSpeed = 2.0f; fails += render (ty == 0 ? "tape_studio" : (ty == 1 ? "tape_cass" : (ty == 2 ? "tape_vhs" : "tape_worn")), tp, out); }
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

@@ -474,4 +474,96 @@ private:
     OnePoleLP lp[2];
 };
 
+//==============================================================================
+// Tape / VHS-style processor (Tridex II): wow + flutter + random drift on a modulated delay,
+// asymmetric tape saturation, age (darkening), hiss and (worn tape) dropouts.
+// TYPE sets the machine's character; the knobs work on top of it:
+//   0 STUDIO    clean reel: little wobble, high headroom, bright, quiet
+//   1 CASSETTE  more flutter, softer top, a little hiss
+//   2 VHS       strong wow, darker, noisier
+//   3 WORN VHS  very wavy and unstable, dark, noisy, with level dropouts
+// Instances built alike produce identical modulation, so per-part instances stay in step.
+struct TapeFx
+{
+    void prepare (float sampleRate)
+    {
+        sr = sampleRate;
+        dl[0].prepare (0.08f, sr); dl[1].prepare (0.08f, sr);
+        wowPh = flPh = 0.0f; drift = driftTarget = driftSlew = 0.0f; driftCount = 0;
+        drop = 1.0f; dropTarget = 1.0f; dropCount = 0;
+        rng = Rng (0x7A9E5u); noiseRng = Rng (0x51C3u); dropRng = Rng (0x2D11u);
+        lastAge = -1.0f; lastType = -1;
+        for (auto& f : hissLp) f.set (7000.0f, sr);
+    }
+
+    // drive, wow, flutter, driftAmt, age, hiss, mix: 0..1; speed: 0.25..2 (x the type's base rates).
+    void process (float& L, float& R, int type, float drive, float wow, float flutter, float speed,
+                  float driftAmt, float age, float hiss, float mix)
+    {
+        static constexpr float kWowMul[]   = { 0.45f, 1.0f, 1.6f, 2.3f };
+        static constexpr float kFlMul[]    = { 0.35f, 1.0f, 1.25f, 1.7f };
+        static constexpr float kAgeBase[]  = { 0.0f, 0.22f, 0.42f, 0.58f };
+        static constexpr float kSatMul[]   = { 0.7f, 1.0f, 1.15f, 1.4f };
+        static constexpr float kHissMul[]  = { 0.3f, 1.0f, 1.6f, 2.2f };
+        static constexpr float kWowRate[]  = { 0.35f, 0.7f, 0.5f, 0.42f };   // Hz at SPEED = 1
+        static constexpr float kFlRate[]   = { 9.0f, 7.3f, 6.1f, 5.4f };
+        static constexpr float kDropout[]  = { 0.0f, 0.0f, 0.15f, 0.55f };
+        const int t = std::clamp (type, 0, 3);
+
+        const float ageAll = std::clamp (kAgeBase[t] + age * (1.0f - kAgeBase[t]), 0.0f, 1.0f);
+        if (ageAll != lastAge || t != lastType)
+        {
+            lastAge = ageAll; lastType = t;
+            const float hz = 18000.0f * std::exp2 (-ageAll * 2.9f);      // 18 kHz (fresh) .. ~2.4 kHz (worn)
+            for (auto& f : ageLp) f.set (hz, sr);
+        }
+
+        // Modulation: wow (slow sine) + flutter (fast, two partials) + drift (smoothed random walk)
+        wowPh += kWowRate[t] * speed / sr; if (wowPh >= 1.0f) wowPh -= 1.0f;
+        flPh  += kFlRate[t] * speed / sr;  if (flPh >= 1.0f) flPh -= 1.0f;
+        if (--driftCount <= 0) { driftTarget = rng.bipolar(); driftCount = (int) (sr * 0.12f / std::max (0.25f, speed)); }
+        driftSlew += (driftTarget - driftSlew) * (speed / (0.25f * sr));
+        drift += (driftSlew - drift) * (speed / (0.35f * sr));
+
+        // Dropouts (worn tape): occasional short level dips
+        if (--dropCount <= 0)
+        {
+            dropCount = (int) (sr * (0.08f + 0.25f * (0.5f + 0.5f * dropRng.bipolar())));
+            dropTarget = (dropRng.bipolar() > 0.55f) ? 1.0f - kDropout[t] * (0.5f + 0.5f * dropRng.bipolar()) : 1.0f;
+        }
+        drop += (dropTarget - drop) * (1.0f / (0.012f * sr));
+
+        const float w = wow * kWowMul[t], f = flutter * kFlMul[t];
+        const float wowSig = std::sin (kTwoPi * wowPh);
+        const float flSig = 0.7f * std::sin (kTwoPi * flPh) + 0.3f * std::sin (kTwoPi * flPh * 2.37f);
+        // Depths (ms): up to ~9 ms x type of wow and drift ("really wavy"), up to 0.6 ms x type of flutter.
+        const float mod = w * 9.0f * wowSig * (1.0f - 0.5f * driftAmt)
+                        + driftAmt * 9.0f * drift * (0.4f + w)
+                        + f * 0.6f * flSig;
+        const float delayMs = 24.0f + mod;
+
+        const float g = 1.0f + drive * kSatMul[t] * 7.0f;
+        const float bias = 0.12f * drive;
+        float io[2] = { L, R };
+        for (int c = 0; c < 2; ++c)
+        {
+            dl[c].push (io[c]);
+            float y = dl[c].read (std::max (0.5f, delayMs + (c == 1 ? 0.04f * mod : 0.0f)) * 0.001f * sr);
+            y = (softClip (y * g + bias) - softClip (bias)) / std::pow (g, 0.65f);   // asymmetric, level-compensated
+            y = ageLp[c * 2 + 1].process (ageLp[c * 2].process (y)) * drop;
+            y += hissLp[c].process (noiseRng.bipolar()) * hiss * kHissMul[t] * 0.02f;
+            io[c] = io[c] + (y - io[c]) * mix;
+        }
+        L = io[0]; R = io[1];
+    }
+
+private:
+    float sr = 44100.0f, wowPh = 0.0f, flPh = 0.0f, drift = 0.0f, driftTarget = 0.0f, driftSlew = 0.0f, lastAge = -1.0f;
+    float drop = 1.0f, dropTarget = 1.0f;
+    int driftCount = 0, dropCount = 0, lastType = -1;
+    Rng rng { 0x7A9E5u }, noiseRng { 0x51C3u }, dropRng { 0x2D11u };
+    DelayLine dl[2];
+    OnePoleLP ageLp[4], hissLp[2];
+};
+
 } // namespace tdx

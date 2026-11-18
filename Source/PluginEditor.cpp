@@ -16,11 +16,21 @@ const juce::Colour kHeaderInk { 0xff2b2a27 };
 const juce::Colour kCapGrey   { 0xffb7b5ae };
 const juce::Colour kCapCream  { 0xffece8db };
 const juce::Colour kCapGreen  { 0xffa9c23c };
+const juce::Colour kCapBlue   { 0xff4f8fd8 };   // non-part on/off switches (OUTPUT, effect ON)
 const juce::Colour kCapOrange { 0xffeb8a34 };
 const juce::Colour kCapRed    { 0xffcf3426 };
 const juce::Colour kCapTan    { 0xff6e4a30 };
 // Part colours for the split indicators: SYNTHE green, BRASS red, STRINGS orange.
 const juce::Colour kPartCol[3] = { juce::Colour (0xff5bd34f), juce::Colour (0xffff3b2c), juce::Colour (0xffff9a2e) };
+// Switch caps in the part colours (for per-part selectors)
+const juce::Colour kPartCap[3] = { juce::Colour (0xff6fbf5c), juce::Colour (0xffd2463a), juce::Colour (0xffe8913a) };
+int partIndexForId (const juce::String& id)
+{
+    if (id.endsWith ("_syn") || id.startsWith ("syn_") || id == "arp1_on" || id == "sg1_on") return 0;
+    if (id.endsWith ("_br")  || id.startsWith ("br_")  || id == "arp2_on" || id == "sg2_on") return 1;
+    if (id.endsWith ("_st")  || id.startsWith ("st_")  || id == "arp3_on" || id == "sg3_on") return 2;
+    return -1;
+}
 const juce::Colour kLedOn  { 0xffff3a2a };
 const juce::Colour kLedOff { 0xff4a1612 };
 
@@ -273,7 +283,7 @@ void OctaveControl::paint (juce::Graphics& g)
     const auto disp = b.withWidth (b.getWidth() * 0.5f).reduced (1.0f, 2.0f);
     g.setColour (juce::Colour (0xff1d0705));
     g.fillRoundedRectangle (disp, 3.0f);
-    g.setColour (value == 0 ? kLedOn.withAlpha (0.5f) : kLedOn);
+    g.setColour (value == 0 ? colour.withAlpha (0.5f) : colour);
     g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::bold));
     g.drawText (value > 0 ? "+" + juce::String (value) : juce::String (value), disp, juce::Justification::centred);
 
@@ -632,6 +642,116 @@ void AboutPage::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
+{
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;
+    setSize (W, H);
+    card = { 18, 40, W - 36, 340 };
+    const int x = card.getX(), y1 = card.getY() + 64, y2 = card.getY() + 214;
+
+    led ("tp_on", { x + 26, y1 + 6, 34, 42 }, "TAPE ON", kCapBlue);
+
+    auto type = std::make_unique<juce::ComboBox>();
+    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("tp_type"))) type->addItemList (c->choices, 1);
+    type->setBounds (x + 90, y1 + 14, 130, 26);
+    type->setTooltip ("Tape type: Studio / Cassette / VHS / Worn VHS");
+    addAndMakeVisible (*type);
+    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, "tp_type", *type));
+    labels.push_back ({ type.get(), "TAPE TYPE" });
+    comps.push_back (std::move (type));
+
+    const char* ids[] = { "tp_wow", "tp_flutter", "tp_speed", "tp_drift", "tp_age", "tp_hiss", "tp_mix" };
+    const char* names[] = { "WOW", "FLUTTER", "SPEED", "DRIFT", "AGE", "HISS", "MIX" };
+    for (int i = 0; i < 7; ++i) knob (ids[i], { x + 262 + i * 96, y1 - 6, 70, 70 }, names[i]);
+
+    // Per-part: select + saturation
+    const char* selIds[] = { "tp_syn", "tp_br", "tp_st" };
+    const char* drvIds[] = { "tp_drv_syn", "tp_drv_br", "tp_drv_st" };
+    const char* parts[] = { "SYNTHE", "BRASS", "STRINGS" };
+    for (int i = 0; i < 3; ++i)
+    {
+        const int px = x + 90 + i * 300;
+        led (selIds[i], { px, y2 + 6, 34, 42 }, parts[i], kPartCap[i]);
+        knob (drvIds[i], { px + 56, y2 - 6, 70, 70 }, juce::String (parts[i]) + " DRIVE");
+    }
+}
+
+juce::Slider& TapePage::knob (const juce::String& id, juce::Rectangle<int> r, const juce::String& label)
+{
+    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("scale", "uni");
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, this);
+    s->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
+    addAndMakeVisible (*s);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    labels.push_back ({ s.get(), label });
+    auto& ref = *s;
+    comps.push_back (std::move (s));
+    return ref;
+}
+
+LedButton& TapePage::led (const juce::String& id, juce::Rectangle<int> r, const juce::String& label, juce::Colour capCol)
+{
+    auto b = std::make_unique<LedButton> (id);
+    b->setClickingTogglesState (true);
+    b->cap = capCol;
+    b->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
+    addAndMakeVisible (*b);
+    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
+    labels.push_back ({ b.get(), label });
+    auto& ref = *b;
+    comps.push_back (std::move (b));
+    return ref;
+}
+
+void TapePage::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText ("TAPE", 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText ("WOW / FLUTTER / SATURATION AT THE END OF EACH PART'S CHAIN  /  PRESS TAPE AGAIN TO CLOSE",
+                80, 8, 760, 18, juce::Justification::centredLeft);
+
+    const auto r = card.toFloat();
+    g.setColour (kPanel2);
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (kInk.withAlpha (0.2f));
+    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    g.setColour (kInk.withAlpha (0.12f));
+    g.drawVerticalLine (card.getX() + 240, r.getY() + 20, r.getY() + 140);
+    g.drawHorizontalLine (card.getY() + 160, r.getX() + 20, r.getRight() - 20);
+
+    g.setColour (kInk.withAlpha (0.7f));
+    g.setFont (juce::FontOptions (9.0f, juce::Font::bold).withKerningFactor (0.1f));
+    g.drawText ("SATURATION PER PART", card.getX() + 24, card.getY() + 172, 300, 14, juce::Justification::centredLeft);
+
+    g.setColour (kInk.withAlpha (0.85f));
+    g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+    for (const auto& [c, text] : labels)
+    {
+        if (text.isEmpty()) continue;
+        const auto cb = c->getBounds().toFloat();
+        g.drawText (text, juce::Rectangle<float> (cb.getX() - 24, cb.getBottom() + 4, cb.getWidth() + 48, 12), juce::Justification::centred);
+    }
+
+    g.setColour (kInk.withAlpha (0.6f));
+    g.setFont (juce::FontOptions (9.0f));
+    g.drawFittedText ("STUDIO: clean reel, little wobble.   CASSETTE: more flutter, softer top, a little hiss.   "
+                      "VHS: strong wow, darker, noisier.   WORN VHS: very wavy and unstable, with dropouts.\n"
+                      "WOW: slow pitch sway.   FLUTTER: fast shimmer.   SPEED: how fast the tape wobbles.   DRIFT: random, unsteady wobble.   "
+                      "AGE: darker, worn tape.   HISS: tape noise.   DRIVE: tape saturation for each part.",
+                      card.withY (card.getBottom() + 14).withHeight (34), juce::Justification::centredLeft, 3);
+}
+
+//==============================================================================
 SpaceButtons::SpaceButtons (juce::RangedAudioParameter& p)
     : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); })
 {
@@ -731,7 +851,10 @@ LedButton& ChorusPage::led (const juce::String& id, juce::Rectangle<int> r)
 {
     auto b = std::make_unique<LedButton> (id);
     b->setClickingTogglesState (true);
-    b->cap = id == "ch_on" ? kCapGreen : kCapGrey;
+    b->cap = id == "ch_on" ? kCapBlue : kCapGrey;
+    if (id == "ch_syn") b->cap = kPartCap[0];
+    if (id == "ch_br")  b->cap = kPartCap[1];
+    if (id == "ch_st")  b->cap = kPartCap[2];
     b->setBounds (r);
     if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
     addAndMakeVisible (*b);
@@ -799,6 +922,7 @@ ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (
 
         // Arpeggiator block
         c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 0,   y + 30, 34, 42 }));
+        c.on->cap = kPartCap[i];
         c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 50,  y + 40, 104, 26 }));
         c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 164, y + 40, 78, 26 }));
         c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 252, y + 40, 52, 26 }));
@@ -808,6 +932,7 @@ ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (
         // Step gate block, to the right
         const int gx = x + 448;
         c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { gx, y + 30, 34, 42 }));
+        c.sgOn->cap = kPartCap[i];
         c.grid   = std::make_unique<GateGrid> (apvts, sg);
         c.grid->setBounds (gx + 46, y + 32, 270, 44);
         addAndMakeVisible (*c.grid);
@@ -965,11 +1090,14 @@ tdxui::LedButton& TridexPanel::led (const char* id, int cx, int y, const juce::S
     b->setBounds (cx - 15, y, 30, 36);
     b->setTooltip (proc.apvts.getParameter (id)->getName (64));
     {
-        // Cap colours by role, as on the original: green OUTPUT, cream footage, tan delay vibrato, grey otherwise.
+        // Cap colours by role, as on the original: blue OUTPUT, cream footage, tan delay vibrato, grey otherwise.
         const juce::String sid (id);
-        if (sid == "syn_on" || sid == "br_on" || sid == "st_on") b->cap = kCapGreen;
+        if (sid == "syn_on" || sid == "br_on" || sid == "st_on") b->cap = kCapBlue;
         else if (sid == "br_16" || sid == "br_8" || sid == "st_16" || sid == "st_8" || sid == "st_4") b->cap = kCapCream;
         else if (sid == "dvib_on") b->cap = kCapTan;
+        else if (sid == "fl_syn") b->cap = kPartCap[0];
+        else if (sid == "fl_br")  b->cap = kPartCap[1];
+        else if (sid == "fl_st")  b->cap = kPartCap[2];
         else b->cap = kCapGrey;
     }
     addAndMakeVisible (*b);
@@ -1011,6 +1139,7 @@ juce::ComboBox& TridexPanel::combo (const char* id, int x, int y, int w)
 void TridexPanel::octave (const char* id, int cx, int y)
 {
     auto o = std::make_unique<tdxui::OctaveControl> (*proc.apvts.getParameter (id));
+    if (const int pi = partIndexForId (id); pi >= 0) o->colour = kPartCol[pi];
     o->setBounds (cx - 22, y, 44, 36);
     o->setTooltip (proc.apvts.getParameter (id)->getName (64) + " (double-click the display to reset)");
     addAndMakeVisible (*o);
@@ -1286,30 +1415,30 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     // ---------------- Plugin setup strip (not on the hardware)
     {
         const int y = 22;
-        int sx = kW - 344;
+        int sx = kW - 304;
         const auto mini = [&] (const char* id, const char* name, const char* tip)
         {
             knob (id, sx, y, "", false, 18).setTooltip (tip);
             text ({ (float) sx + 15, 15, 44, 12 }, name, 8.0f, false, juce::Justification::centredLeft);
-            sx += 68;
+            sx += 62;
         };
         mini ("bend_range", "BEND", "Joystick pitch-bend range");
         mini ("drift", "DRIFT", "Analog drift (per-voice tuning tolerance)");
         mini ("vel_sens", "VELO", "Velocity sensitivity (not on the hardware)");
         pedalBox.addItemList ({ "Pedal: Off", "Pedal: Damper", "Pedal: Hold" }, 1);
-        pedalBox.setBounds (sx - 10, 10, 118, 22);
+        pedalBox.setBounds (sx - 10, 10, 100, 22);
         addAndMakeVisible (pedalBox);
         pedalAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "pedal_mode", pedalBox);
 
         // Tridex II: note priority for Synth / Brass MONO
         prioBox.addItemList ({ "Priority: Last", "Priority: First", "Priority: Low", "Priority: High" }, 1);
-        prioBox.setBounds (kW - 468, 10, 106, 22);
+        prioBox.setBounds (kW - 418, 10, 100, 22);
         prioBox.setTooltip ("Note priority for Synth and Brass MONO");
         addAndMakeVisible (prioBox);
         prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
     }
 
-    lcd = { 276, 9, 160, 24 };
+    lcd = { 276, 9, 130, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
@@ -1322,7 +1451,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->onClick = [this]
         {
             arpPage->setVisible (! arpPage->isVisible());
-            if (arpPage->isVisible()) { chorusPage->setVisible (false); if (aboutPage) aboutPage->setVisible (false); arpPage->toFront (false); }
+            if (arpPage->isVisible()) { chorusPage->setVisible (false); if (aboutPage) aboutPage->setVisible (false); if (tapePage) tapePage->setVisible (false); arpPage->toFront (false); }
         };
         addAndMakeVisible (*b);
         arpBtn = b.get();
@@ -1340,7 +1469,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     logoHotspot->onClick = [this]
     {
         aboutPage->setVisible (! aboutPage->isVisible());
-        if (aboutPage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); aboutPage->toFront (false); }
+        if (aboutPage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); if (tapePage) tapePage->setVisible (false); aboutPage->toFront (false); }
     };
     addAndMakeVisible (*logoHotspot);
 
@@ -1350,17 +1479,36 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     addChildComponent (*chorusPage);
     {
         auto b = std::make_unique<tdxui::LedButton> ("CHORUS");
-        b->setBounds (lcd.getRight() + 94, 4, 30, 32);
+        b->setBounds (lcd.getRight() + 90, 4, 30, 32);
         b->setTooltip ("Show / hide the chorus page");
         b->onClick = [this]
         {
             chorusPage->setVisible (! chorusPage->isVisible());
-            if (chorusPage->isVisible()) { arpPage->setVisible (false); aboutPage->setVisible (false); chorusPage->toFront (false); }
+            if (chorusPage->isVisible()) { arpPage->setVisible (false); aboutPage->setVisible (false); if (tapePage) tapePage->setVisible (false); chorusPage->toFront (false); }
         };
         addAndMakeVisible (*b);
         chorusBtn = b.get();
         owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 128, 13, 64, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 124, 13, 60, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
+    }
+
+    // ---------------- TAPE page toggle (Tridex II)
+    tapePage = std::make_unique<tdxui::TapePage> (proc.apvts);
+    tapePage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*tapePage);
+    {
+        auto b = std::make_unique<tdxui::LedButton> ("TAPE");
+        b->setBounds (lcd.getRight() + 190, 4, 30, 32);
+        b->setTooltip ("Show / hide the tape page");
+        b->onClick = [this]
+        {
+            tapePage->setVisible (! tapePage->isVisible());
+            if (tapePage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); aboutPage->setVisible (false); tapePage->toFront (false); }
+        };
+        addAndMakeVisible (*b);
+        tapeBtn = b.get();
+        owned.push_back (std::move (b));
+        text ({ (float) lcd.getRight() + 224, 13, 44, 14 }, "TAPE", 10.0f, true, juce::Justification::centredLeft);
     }
 
     // ---------------- Keyboard (61 keys, C-C)
@@ -1428,6 +1576,7 @@ void TridexPanel::timerCallback()
     if (splitOverlay) splitOverlay->refreshIfChanged();
     if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
     if (chorusBtn->lit != chorusPage->isVisible()) { chorusBtn->lit = chorusPage->isVisible(); chorusBtn->repaint(); }
+    if (tapeBtn && tapeBtn->lit != tapePage->isVisible()) { tapeBtn->lit = tapePage->isVisible(); tapeBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
 
@@ -1536,10 +1685,12 @@ void TridexPanel::paint (juce::Graphics& g)
     {
         const float tw = juce::GlyphArrangement::getStringWidth (barFont, b.s) + 14.0f;
         const float mid = (b.x1 + b.x2) * 0.5f;
-        g.setColour (kInk.withAlpha (0.7f));
-        g.fillRect (b.x1, b.y + 5.0f, mid - tw * 0.5f - b.x1, 1.5f);
-        g.fillRect (mid + tw * 0.5f, b.y + 5.0f, b.x2 - (mid + tw * 0.5f), 1.5f);
-        g.setColour (kInk);
+        const int pi = b.s == "SYNTHESIZER" ? 0 : (b.s == "BRASS" ? 1 : (b.s == "STRINGS" ? 2 : -1));
+        const auto lineCol = pi >= 0 ? kPartCol[pi] : kInk.withAlpha (0.7f);
+        g.setColour (lineCol);
+        g.fillRect (b.x1, b.y + 5.0f, mid - tw * 0.5f - b.x1, pi >= 0 ? 2.0f : 1.5f);
+        g.fillRect (mid + tw * 0.5f, b.y + 5.0f, b.x2 - (mid + tw * 0.5f), pi >= 0 ? 2.0f : 1.5f);
+        g.setColour (pi >= 0 ? kPartCol[pi] : kInk);
         g.drawText (b.s, juce::Rectangle<float> (mid - tw * 0.5f, b.y - 2.0f, tw, 14.0f), juce::Justification::centred);
     }
 }

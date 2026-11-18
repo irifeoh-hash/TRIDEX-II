@@ -71,6 +71,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "ch_depth", "Chorus Depth", unit, 0.5f);
     addF (l, "ch_mix",   "Chorus Mix", unit, 0.5f);
 
+    // ---- Tape / VHS (Tridex II)
+    addB (l, "tp_on",      "Tape On", false);
+    addB (l, "tp_syn",     "Tape Synthe", true);
+    addB (l, "tp_br",      "Tape Brass", true);
+    addB (l, "tp_st",      "Tape Strings", true);
+    addC (l, "tp_type",    "Tape Type", { "Studio", "Cassette", "VHS", "Worn VHS" }, 1);
+    addF (l, "tp_drv_syn", "Tape Synthe Drive", unit, 0.3f);
+    addF (l, "tp_drv_br",  "Tape Brass Drive", unit, 0.3f);
+    addF (l, "tp_drv_st",  "Tape Strings Drive", unit, 0.3f);
+    addF (l, "tp_wow",     "Tape Wow", unit, 0.3f);
+    { NR sp (0.25f, 2.0f); sp.setSkewForCentre (1.0f); addF (l, "tp_speed", "Tape Speed", sp, 1.0f, "x"); }
+    addF (l, "tp_flutter", "Tape Flutter", unit, 0.2f);
+    addF (l, "tp_drift",   "Tape Drift", unit, 0.3f);
+    addF (l, "tp_age",     "Tape Age", unit, 0.3f);
+    addF (l, "tp_hiss",    "Tape Hiss", unit, 0.1f);
+    addF (l, "tp_mix",     "Tape Mix", unit, 1.0f);
+
     // ---- Plugin extras (not on the hardware panel)
     addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // legacy (unused): per-part splits below
     addF (l, "syn_split",  "Synthe Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
@@ -274,6 +291,10 @@ void TridexProcessor::syncParams()
     p.mgSpeed = get ("mg_speed"); p.mgIntensity = get ("mg_int");
     p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int");
     p.flSynth = on ("fl_syn"); p.flBrass = on ("fl_br"); p.flStrings = on ("fl_st");
+    p.tpOn = on ("tp_on"); p.tpSynth = on ("tp_syn"); p.tpBrass = on ("tp_br"); p.tpStrings = on ("tp_st");
+    p.tpType = idx ("tp_type"); p.tpDrive = { get ("tp_drv_syn"), get ("tp_drv_br"), get ("tp_drv_st") };
+    p.tpWow = get ("tp_wow"); p.tpSpeed = get ("tp_speed"); p.tpFlutter = get ("tp_flutter");
+    p.tpDrift = get ("tp_drift"); p.tpAge = get ("tp_age"); p.tpHiss = get ("tp_hiss"); p.tpMix = get ("tp_mix");
     p.chOn = on ("ch_on"); p.chSynth = on ("ch_syn"); p.chBrass = on ("ch_br"); p.chStrings = on ("ch_st");
     p.chMode = idx ("ch_mode"); p.chSpace = idx ("ch_space"); p.chWidth = get ("ch_width"); p.chTone = get ("ch_tone"); p.chRate = get ("ch_rate"); p.chDepth = get ("ch_depth"); p.chMix = get ("ch_mix");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
