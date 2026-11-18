@@ -9,18 +9,18 @@ const juce::Colour kPanel     { 0xff3a3935 };
 const juce::Colour kPanel2    { 0xff302f2c };
 const juce::Colour kLid       { 0xff1f1e1c };
 const juce::Colour kWood      { 0xff3e1d0f };
-const juce::Colour kInk       { 0xffece8de };
+const juce::Colour kInk       { 0xffffffff };
 const juce::Colour kOrange    { 0xffe8893a };
-const juce::Colour kSynText   { 0xff7fd96f };   // synth-section legends (part green)
-const juce::Colour kHeader    { 0xffc3c0b7 };
-const juce::Colour kHeaderInk { 0xff2b2a27 };
+const juce::Colour kSynText   { 0xffffffff };   // legends: all white
+const juce::Colour kHeader    { 0xff5b5953 };
+const juce::Colour kHeaderInk { 0xffffffff };
 const juce::Colour kCapGrey   { 0xffb7b5ae };
 const juce::Colour kCapCream  { 0xffece8db };
 const juce::Colour kCapGreen  { 0xffa9c23c };
 const juce::Colour kCapBlue   { 0xff4f8fd8 };   // non-part on/off switches (OUTPUT, effect ON)
 const juce::Colour kCapOrange { 0xffeb8a34 };
 const juce::Colour kCapRed    { 0xffcf3426 };
-const juce::Colour kCapYellow { 0xffe8c93a };   // programmer
+const juce::Colour kCapYellow { 0xfff4f2ec };   // programmer (white caps)
 const juce::Colour kCapTan    { 0xff6e4a30 };
 // Part colours for the split indicators: SYNTHE green, BRASS red, STRINGS orange.
 const juce::Colour kPartCol[3] = { juce::Colour (0xff5bd34f), juce::Colour (0xffff3b2c), juce::Colour (0xffff9a2e) };
@@ -581,7 +581,7 @@ AboutPage::AboutPage (std::function<void()> onClose) : closeFn (std::move (onClo
     const int W = TridexPanel::kW - 48, H = kLowerY - 40;
     setSize (W, H);
     instagram.setFont (juce::FontOptions (16.0f, juce::Font::bold), false, juce::Justification::centredLeft);
-    instagram.setColour (juce::HyperlinkButton::textColourId, kOrange);
+    instagram.setColour (juce::HyperlinkButton::textColourId, kInk);
     instagram.setTooltip ("Open in your browser");
     instagram.setBounds (330, 438, 320, 26);
     addAndMakeVisible (instagram);
@@ -611,7 +611,7 @@ void AboutPage::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (30.0f, juce::Font::bold).withKerningFactor (0.12f));
     g.drawText ("TRIDEX II", 330, 60, 500, 40, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold).withKerningFactor (0.08f));
-    g.setColour (kOrange);
+    g.setColour (kInk);
     g.drawText ("PERFORMING KEYBOARD  /  BY I RIFE", 330, 98, 500, 18, juce::Justification::centredLeft);
 
     const juce::String synopsis =
@@ -1202,7 +1202,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             sel->setTooltip (juce::String (names[i]) + " split: lower 2 / upper 3 octaves");
             addAndMakeVisible (*sel);
             owned.push_back (std::move (sel));
-            text ({ (float) col (1) - 28, (float) y + 22, 56, 10 }, names[i], 8.0f, true, juce::Justification::centred, kPartCol[i]);
+            text ({ (float) col (1) - 28, (float) y + 22, 56, 10 }, names[i], 8.0f, true, juce::Justification::centred, kInk);
 
             // Tridex II: this part's own split point
             const char* splitIds[] = { "syn_split", "br_split", "st_split" };
