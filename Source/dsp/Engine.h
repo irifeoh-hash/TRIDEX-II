@@ -183,8 +183,10 @@ public:
         stringsVcfL.prepare (sr); stringsVcfR.prepare (sr);
         stVib.prepare (0.03f, sr);
         ensemble.prepare (sr);
-        flanger.prepare (sr);
-        chorus.prepare (sr);
+        for (auto& f : flangers) f.prepare (sr);
+        for (auto& c : choruses) c.prepare (sr);
+        for (auto& d : dcPL) d = {};
+        for (auto& d : dcPR) d = {};
         for (auto* d : { &dcL, &dcR }) *d = {};
         brassHeld = stringsHeld = 0; nextVoice = 0;
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
@@ -257,7 +259,8 @@ public:
     }
 
     //--------------------------------------------------------------------------
-    void render (float* outL, float* outR, int numSamples)
+    // partL / partR (optional): per-part outputs [0] Synth, [1] Brass, [2] Strings; null entries are skipped.
+    void render (float* outL, float* outR, int numSamples, float* const* partL = nullptr, float* const* partR = nullptr)
     {
         updateCoefficients();
         const double invSr = 1.0 / sr;
@@ -478,32 +481,37 @@ public:
             // ---- Flanger on selected sections
             // Routing: chorus-selected parts go through the chorus first; flanger-selected parts
             // (and the chorus output, if any chorused part is also flanger-selected) through the flanger.
-            // Sends are crossfaded (~10 ms) so switching effects or their part selection never clicks.
-            float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f, cL = 0.0f, cR = 0.0f;
+            // Each part runs through its own chorus and flanger (same settings, LFOs in step), so it
+            // can also be sent to its own output. Sends are crossfaded (~10 ms): no clicks when switching.
             const bool chSel[3] = { p.chSynth, p.chBrass, p.chStrings };
             const bool flSel[3] = { p.flSynth, p.flBrass, p.flStrings };
             const float secL[3] = { synth * gl[0], brass * gl[1], sL * gl[2] };
             const float secR[3] = { synth * gr[0], brass * gr[1], sR * gr[2] };
-            float chWeight = 0.0f, chToFl = 0.0f;
+            float mixL = 0.0f, mixR = 0.0f;
             for (int s = 0; s < 3; ++s)
             {
                 chSend[(size_t) s] += (((p.chOn && chSel[s]) ? 1.0f : 0.0f) - chSend[(size_t) s]) * sendSmooth;
                 flSend[(size_t) s] += ((flSel[s] ? 1.0f : 0.0f) - flSend[(size_t) s]) * sendSmooth;
                 const float c = chSend[(size_t) s], f = flSend[(size_t) s];
-                cL += secL[s] * c;                    cR += secR[s] * c;
-                fL += secL[s] * (1.0f - c) * f;       fR += secR[s] * (1.0f - c) * f;
-                dL += secL[s] * (1.0f - c) * (1.0f - f); dR += secR[s] * (1.0f - c) * (1.0f - f);
-                chWeight += c; chToFl += c * f;
-            }
-            // Effects always run, so their state is ready the moment they're switched in.
-            chorus.process (cL, cR, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
-            const float toFl = chWeight > 1.0e-4f ? std::clamp (chToFl / chWeight, 0.0f, 1.0f) : 0.0f;
-            fL += cL * toFl;          fR += cR * toFl;
-            dL += cL * (1.0f - toFl); dR += cR * (1.0f - toFl);
-            flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
 
-            outL[i] = outputStage (dcL.process (dL + fL) * p.master);
-            outR[i] = outputStage (dcR.process (dR + fR) * p.master);
+                float xl = secL[s], xr = secR[s];
+                float cl = xl, cr = xr;      // effects always run so they're ready when switched in
+                choruses[(size_t) s].process (cl, cr, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
+                xl += (cl - xl) * c;  xr += (cr - xr) * c;
+                float fl = xl, fr = xr;
+                flangers[(size_t) s].process (fl, fr, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
+                xl += (fl - xl) * f;  xr += (fr - xr) * f;
+
+                mixL += xl; mixR += xr;
+                if (partL != nullptr && partL[s] != nullptr)
+                {
+                    partL[s][i] = outputStage (dcPL[(size_t) s].process (xl) * p.master);
+                    partR[s][i] = outputStage (dcPR[(size_t) s].process (xr) * p.master);
+                }
+            }
+
+            outL[i] = outputStage (dcL.process (mixL) * p.master);
+            outR[i] = outputStage (dcR.process (mixR) * p.master);
         }
     }
 
@@ -963,8 +971,8 @@ private:
     float stVibEnv = 1.0f, bowDecay = 0.999f;
     Biquad bowBp, eqLoL, eqLoR, eqHiL, eqHiR;
     Ensemble ensemble;
-    Flanger flanger;
-    StereoChorus chorus;
+    std::array<Flanger, 3> flangers;          // one per part (same settings), for separate outputs
+    std::array<StereoChorus, 3> choruses;
 
     std::array<bool, 128> held {}, sustained {};
     std::array<uint8_t, 128> keyMask {}, arpMask {};   // per held key: sections played directly / via arp
@@ -986,6 +994,7 @@ private:
     float delayVibEnv = 1.0f, bend = 0.0f, joyVib = 0.0f, joyTrill = 0.0f;
     Rng rng { 0xBADA55u };
     DcBlocker dcL, dcR;
+    std::array<DcBlocker, 3> dcPL {}, dcPR {};
 };
 
 } // namespace tdx

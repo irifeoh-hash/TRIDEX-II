@@ -210,7 +210,10 @@ const juce::StringArray& TridexProcessor::programmableIds()
 
 //==============================================================================
 TridexProcessor::TridexProcessor()
-    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+    : AudioProcessor (BusesProperties().withOutput ("Main",    juce::AudioChannelSet::stereo(), true)
+                                       .withOutput ("Synthe",  juce::AudioChannelSet::stereo(), true)
+                                       .withOutput ("Brass",   juce::AudioChannelSet::stereo(), true)
+                                       .withOutput ("Strings", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "TRIDEX", createLayout())
 {
     for (int i = 0; i < 3; ++i)
@@ -241,7 +244,14 @@ TridexProcessor::TridexProcessor()
 
 bool TridexProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    // Main must be stereo; the three separate part outputs may each be stereo or switched off.
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    for (int b = 1; b < layouts.outputBuses.size(); ++b)
+    {
+        const auto& set = layouts.outputBuses.getReference (b);
+        if (! set.isDisabled() && set != juce::AudioChannelSet::stereo()) return false;
+    }
+    return true;
 }
 
 void TridexProcessor::prepareToPlay (double sampleRate, int)
@@ -365,19 +375,35 @@ void TridexProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
     buffer.clear();
 
-    auto* L = buffer.getWritePointer (0);
-    auto* R = buffer.getWritePointer (1);
+    // Main mix + optional separate outputs (Synthe / Brass / Strings), like the hardware's SEPARATE OUT.
+    auto main = getBusBuffer (buffer, false, 0);
+    float* L = main.getWritePointer (0);
+    float* R = main.getWritePointer (1);
+    float* pl[3] { nullptr, nullptr, nullptr };
+    float* pr[3] { nullptr, nullptr, nullptr };
+    for (int s = 0; s < 3; ++s)
+        if (s + 1 < getBusCount (false) && getBus (false, s + 1)->isEnabled())
+        {
+            auto bus = getBusBuffer (buffer, false, s + 1);
+            if (bus.getNumChannels() >= 2) { pl[s] = bus.getWritePointer (0); pr[s] = bus.getWritePointer (1); }
+        }
     int pos = 0;
+    const auto renderTo = [&] (int start, int count)
+    {
+        float* opl[3]; float* opr[3];
+        for (int s = 0; s < 3; ++s) { opl[s] = pl[s] ? pl[s] + start : nullptr; opr[s] = pr[s] ? pr[s] + start : nullptr; }
+        engine.render (L + start, R + start, count, opl, opr);
+    };
 
     // Sample-accurate MIDI: render up to each event, then apply it.
     for (const auto meta : midi)
     {
         const int t = juce::jlimit (0, buffer.getNumSamples(), meta.samplePosition);
-        if (t > pos) { engine.render (L + pos, R + pos, t - pos); pos = t; }
+        if (t > pos) { renderTo (pos, t - pos); pos = t; }
         handleMidi (meta.getMessage());
     }
     if (pos < buffer.getNumSamples())
-        engine.render (L + pos, R + pos, buffer.getNumSamples() - pos);
+        renderTo (pos, buffer.getNumSamples() - pos);
 }
 
 //==============================================================================
