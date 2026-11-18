@@ -957,6 +957,7 @@ void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend,
     sw->leftLabel = left; sw->rightLabel = right;
     sw->setBounds (cx - 28, cy - 18, 56, 30);
     sw->setTooltip (left == "PORTA" ? "Glide mode: PORTA (smooth slide) / GLISS (semitone steps)"
+                                    : left == "PARA" ? "Brass voicing: PARA (shared EG/VCA, like the original) / POLY (own EG, VCF and VCA per note)"
                                     : "MONO mode: RETRIG (every key restarts the envelopes) / LEGATO (no restart while a key is held)");
     addAndMakeVisible (*sw);
     bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, id, *sw));
@@ -1128,7 +1129,8 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         octave ("br_octsh", bx += 46, (kSwY + kTier));
         // Tridex II: per-note brass filter switch
         led ("br_polyvcf", col (6), (kRow1 + kTier) - 22, "POLY VCF");
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, (kModY + kTier), "VCF MODE");
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, (kModY + kTier), "VOICING");
+        modeSwitch ("br_poly", col (6), (kRow2 + kTier), false, "PARA", "POLY");
         // Tridex II: glide (portamento / glissando)
         knob ("br_glide", col (7), (kRow1 + kTier), "GLIDE TIME", false);
         modeSwitch ("br_gliss", col (7), (kRow2 + kTier), false);

@@ -138,6 +138,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "br_mono",   "Brass Mono", false);
     addB (l, "br_legato", "Brass Legato", true);
     addB (l, "br_polyvcf","Brass Poly VCF", false);
+    addB (l, "br_poly",   "Brass Polyphonic", false);   // switch: PARA (off) / POLY (on)
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "br_glide", "Brass Glide Time", g, 0.0f, "s"); }
     addB (l, "br_gliss",  "Brass Glissando", false);
     addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
@@ -293,7 +294,7 @@ void TridexProcessor::syncParams()
     p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
-    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf");
+    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf"); p.brPoly = on ("br_poly");
     p.synMono = on ("syn_mono"); p.synLegato = on ("syn_legato"); p.brLegato = on ("br_legato");
     p.synGlide = get ("syn_glide"); p.synGliss = on ("syn_gliss");
     p.brGlide = get ("br_glide"); p.brGliss = on ("br_gliss"); p.silenceNote = idx ("br_silence");

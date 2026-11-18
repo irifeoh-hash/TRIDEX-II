@@ -64,6 +64,7 @@ struct Params
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
     int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
+    bool brPoly = false;                                // Tridex II: true polyphonic brass (own EG + VCF + VCA per note) vs paraphonic
     float synGlide = 0.0f, brGlide = 0.0f;              // Tridex II: glide time in seconds (0 = off)
     bool synGliss = false, brGliss = false;             // false = portamento (smooth), true = glissando (semitone steps)
 
@@ -142,6 +143,7 @@ struct Voice
     Ladder brVcf;                // Tridex II: per-note brass filter (POLY VCF mode)
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
+    Adsr brEnv;                  // per-note brass EG (POLY voicing)
     bool brCut = false;          // brass gate being cut quickly (mono note change)
     int pitchNote = -1;          // note the oscillators are actually playing
     float glidePitch = 60.0f, glideTarget = 60.0f, glideCoef = 1.0f;   // portamento / glissando state
@@ -151,7 +153,7 @@ struct Voice
     bool swapping = false;
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
 
-    bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || stEnv.isActive(); }
+    bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || brEnv.isActive() || stEnv.isActive(); }
 };
 
 //==============================================================================
@@ -169,7 +171,7 @@ public:
         {
             v = Voice {};
             v.vcf.prepare (sr); v.vcf.compensation = 0.6f;   // mostly flat passband (manual's graph), less boom
-            v.brVcf.prepare (sr);
+            v.brVcf.prepare (sr); v.brEnv.prepare (sr);
             v.fenv.prepare (sr); v.aenv.prepare (sr);
             v.driftCents = r.bipolar() * 3.0f;
             v.v2Offset = r.bipolar() * 2.0f;
@@ -387,9 +389,17 @@ public:
                     }
                     // Normalise the oscillator stack (16' + 8' + OSC 2) so it doesn't overdrive the filter.
                     b *= brassMixNorm;
-                    if (p.brPolyVcf)
+                    if (p.brPoly)
                     {
-                        // Own filter per note, half key tracking, swept by the shared brass EG.
+                        // POLY voicing: this note's own EG drives its own filter and amplifier.
+                        const float e = v.brEnv.process();
+                        const float cutOct = p.brCutoff * 10.0f + p.brEgInt * e * 8.0f + 0.5f * ((float) v.pitchNote - 60.0f) / 12.0f;
+                        v.brVcf.setCutoff (20.0f * std::exp2 (cutOct), p.brRes);
+                        b = v.brVcf.process (b * kBrassIn) * kBrassMakeup * e;
+                    }
+                    else if (p.brPolyVcf)
+                    {
+                        // PARA voicing, own filter per note, half key tracking, swept by the shared brass EG.
                         const float cutOct = p.brCutoff * 10.0f + p.brEgInt * brassEnv.value * 8.0f + 0.5f * ((float) v.pitchNote - 60.0f) / 12.0f;
                         v.brVcf.setCutoff (20.0f * std::exp2 (cutOct), p.brRes);
                         b = v.brVcf.process (b * kBrassIn) * kBrassMakeup;
@@ -412,7 +422,13 @@ public:
 
             // ---- Brass: single VCF + VCA driven by one EG (paraphonic)
             float brass = 0.0f;
-            if (brassEnv.isActive() || brassGateOpen)
+            if (p.brPoly)
+            {
+                // POLY voicing: notes were enveloped and filtered individually above.
+                brassEnv.process();   // keep the shared EG ticking so switching back is seamless
+                brass = brSum * (1.0f / std::sqrt (std::max (1.0f, brWeight))) * p.brVolume;
+            }
+            else if (brassEnv.isActive() || brassGateOpen)
             {
                 const float e = brassEnv.process();
                 // Voice-count compensation: 1/sqrt(notes sounding), following the gate fades,
@@ -586,6 +602,7 @@ private:
         v.fenv.reset(); v.aenv.reset();
         if (v.synGate) { v.fenv.gateOn(); v.aenv.gateOn(); }
         v.brGateEnv.value = 0.0f;
+        v.brEnv.reset(); if (v.brGate) v.brEnv.gateOn();
         v.stEnv.value = 0.0f;
         v.bowEnv.value = v.stGate ? 1.0f : 0.0f;
         v.vcf.reset(); v.brVcf.reset();
@@ -763,7 +780,7 @@ private:
         if (monoCount > 0) { const int k = pickByPriority (monoStack, monoCount); monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k], false); return; }
         if (auto* mv = monoVoice (bVoice, monoCurrent, 1))
         {
-            mv->brGate = false; mv->brGateEnv.gate = false;
+            mv->brGate = false; mv->brGateEnv.gate = false; mv->brEnv.gateOff();
             mv->keyDown = mv->synGate || mv->stGate;
             const bool wasOn = brassHeld >= brassThreshold();
             brassHeld = std::max (0, brassHeld - 1);
@@ -782,11 +799,11 @@ private:
             if (! keyWasHeld)
             {
                 // New press while the mono voice is releasing: reopen it; the brass EG re-attacks from its level.
-                mv->brGate = true; mv->brGateEnv.gate = true; mv->brCut = false;
+                mv->brGate = true; mv->brGateEnv.gate = true; mv->brCut = false; mv->brEnv.gateOn();
                 ++brassHeld;
                 if (brassHeld >= brassThreshold()) brassEnv.gateOn();
             }
-            else if (press && ! p.brLegato) brassEnv.gateOn();                              // RETRIG: re-attack from current level
+            else if (press && ! p.brLegato) { brassEnv.gateOn(); mv->brEnv.gateOn(); }      // RETRIG: re-attack from current level
             bVoiceNote = note;
         }
         else
@@ -885,6 +902,7 @@ private:
             // every note; TRIGGER SELECT = brass only sounds once SILENCE NOTE keys are held.
             v.brGate = true;
             v.brGateEnv.gate = true;
+            v.brEnv.gateOn();                     // per-note EG (used in POLY voicing)
             ++brassHeld;
             const int threshold = brassThreshold();
             if (! suppressBrassTrigger && (brassHeld == threshold || (brassHeld > threshold && p.multiTrig))) brassEnv.gateOn();
@@ -911,6 +929,7 @@ private:
         {
             v.brGate = false;
             v.brGateEnv.gate = false;
+            v.brEnv.gateOff();
             const bool wasOn = brassHeld >= brassThreshold();
             brassHeld = std::max (0, brassHeld - 1);
             if (wasOn && brassHeld < brassThreshold() && ! stolen) brassEnv.gateOff();
@@ -940,6 +959,7 @@ private:
             v.stEnv.set (p.stAttack, p.stRelease, sr);
         }
         brassEnv.set (p.brA, p.brD, p.brS, p.brR);
+        for (auto& v : voices) v.brEnv.set (p.brA, p.brD, p.brS, p.brR);
         bowDecay = std::exp (-1.0f / (0.12f * sr));
         bowBp.bandPass (400.0f * std::exp2 (p.bowTone * 3.0f), 1.8f, sr);
         eqLoL.lowShelf (180.0f, p.eqLow * 2.0f, sr);   eqLoR.lowShelf (180.0f, p.eqLow * 2.0f, sr);

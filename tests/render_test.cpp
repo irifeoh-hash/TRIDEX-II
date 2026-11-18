@@ -64,6 +64,8 @@ int main (int argc, char** argv)
     tdx::Params np; np.synMono = true; np.brOn = true; np.brMono = true; np.notePriority = 3; fails += render ("prio_high", np, out);
     for (int m = 0; m < 4; ++m) { tdx::Params cp; cp.stOn = cp.brOn = true; cp.chOn = true; cp.chMode = m; cp.chStrings = true; cp.flBrass = true; cp.chBrass = true;
         cp.chSpace = 3; fails += render (m == 0 ? "chorus1" : (m == 1 ? "chorus2" : (m == 2 ? "ensemble" : "space")), cp, out); }
+    tdx::Params bp; bp.synOn = false; bp.brOn = true; bp.brPoly = true; bp.br2Scale = 2; fails += render ("brass_poly", bp, out);
+    tdx::Params bpm = bp; bpm.brMono = true; fails += render ("brass_poly_mono", bpm, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }
