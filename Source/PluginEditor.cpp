@@ -36,7 +36,7 @@ int partIndexForId (const juce::String& id)
 const juce::Colour kLedOn  { 0xffff3a2a };
 const juce::Colour kLedOff { 0xff4a1612 };
 
-constexpr int kCol = 58;                 // column pitch
+constexpr int kCol = 66;                 // column pitch
 constexpr int kHeadY = 42;               // section header bars (top)
 constexpr int kRow1 = 98, kRow2 = 170;   // knob centre rows
 constexpr int kModY = 210;               // module names
@@ -46,6 +46,7 @@ constexpr int kTier = 270;               // second row of sections sits this far
 constexpr int kLowerY = 312 + kTier;     // joystick / keyboard area
 constexpr int kRail = 10;                // wooden rail under the keys
 constexpr int kKeysX = 312;              // keyboard starts here
+constexpr int kStrip = 26;               // split-indicator strip above the keys
 } // namespace
 
 namespace tdxui
@@ -407,6 +408,9 @@ void SplitOverlay::paint (juce::Graphics& g)
     };
     const float right = keyX (highKey + 1), h = (float) getHeight();
 
+    g.setColour (juce::Colour (0xff141412));
+    g.fillRoundedRectangle (getLocalBounds().toFloat(), 3.0f);
+
     for (int s = 0; s < 3; ++s)
     {
         const int zone = juce::roundToInt (last[(size_t) s]);
@@ -415,27 +419,20 @@ void SplitOverlay::paint (juce::Graphics& g)
         const auto col = kPartCol[s].withAlpha (on ? 1.0f : 0.3f);
         const float xs = keyX (split);
 
-        // Range bar along the top of the keys
+        // Range bar for this part
         const float x0 = zone == 2 ? xs : 0.0f, x1 = zone == 0 ? xs : right;
-        const auto bar = juce::Rectangle<float> (x0 + 1.0f, 1.0f + (float) s * 7.0f, std::max (0.0f, x1 - x0 - 2.0f), 5.5f);
-        g.setColour (juce::Colours::black.withAlpha (on ? 0.55f : 0.2f));
-        g.fillRoundedRectangle (bar.expanded (1.0f), 2.5f);
+        const auto bar = juce::Rectangle<float> (x0 + 2.0f, 3.0f + (float) s * 7.0f, std::max (0.0f, x1 - x0 - 4.0f), 5.0f);
         g.setColour (col);
         g.fillRoundedRectangle (bar, 2.0f);
 
-        // Split line (only meaningful for L or H), offset per part so equal splits stay visible
+        // Split marker (only meaningful for L or H), offset per part so equal splits stay visible
         if (zone != 1)
         {
             const float x = xs + (float) (s - 1) * 4.0f;
-            g.setColour (juce::Colours::black.withAlpha (on ? 0.5f : 0.2f));
-            g.fillRect (x - 2.5f, 0.0f, 5.0f, h);
             g.setColour (col);
-            g.fillRect (x - 1.5f, 0.0f, 3.0f, h);
+            g.fillRect (x - 1.0f, 1.0f, 2.0f, h - 2.0f);
             juce::Path tri;
-            tri.addTriangle (x - 6.0f, h, x + 6.0f, h, x, h - 9.0f);
-            g.setColour (juce::Colours::black.withAlpha (0.6f));
-            g.strokePath (tri, juce::PathStrokeType (2.0f));
-            g.setColour (col);
+            tri.addTriangle (x - 4.5f, h - 6.0f, x + 4.5f, h - 6.0f, x, h - 0.5f);
             g.fillPath (tri);
         }
     }
@@ -664,7 +661,7 @@ TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
 
     const char* ids[] = { "tp_wow", "tp_flutter", "tp_speed", "tp_drift", "tp_age", "tp_hiss", "tp_mix" };
     const char* names[] = { "WOW", "FLUTTER", "SPEED", "DRIFT", "AGE", "HISS", "MIX" };
-    for (int i = 0; i < 7; ++i) knob (ids[i], { x + 262 + i * 96, y1 - 6, 70, 70 }, names[i]);
+    for (int i = 0; i < 7; ++i) knob (ids[i], { x + 272 + i * 116, y1 - 6, 70, 70 }, names[i]);
 
     // Per-part: select + saturation
     const char* selIds[] = { "tp_syn", "tp_br", "tp_st" };
@@ -672,7 +669,7 @@ TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
     const char* parts[] = { "SYNTHE", "BRASS", "STRINGS" };
     for (int i = 0; i < 3; ++i)
     {
-        const int px = x + 90 + i * 300;
+        const int px = x + 110 + i * 380;
         led (selIds[i], { px, y2 + 6, 34, 42 }, parts[i], kPartCap[i]);
         knob (drvIds[i], { px + 56, y2 - 6, 70, 70 }, juce::String (parts[i]) + " DRIVE");
     }
@@ -1517,7 +1514,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     // ---------------- Keyboard (61 keys, C-C)
     keyboard.setAvailableRange (36, 96);
     keyboard.setLowestVisibleKey (36);
-    keyboard.setBounds (kKeysX + 2, kLowerY + 6, kW - kKeysX - 32, kH - kLowerY - 12 - kRail);
+    keyboard.setBounds (kKeysX + 2, kLowerY + 6 + kStrip, kW - kKeysX - 32, kH - kLowerY - 12 - kRail - kStrip);
     keyboard.setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour (0xfff2ecdc));
     keyboard.setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour (0xff101010));
     keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour (0xff8f8a7e));
@@ -1527,9 +1524,9 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha (0.35f));
     addAndMakeVisible (keyboard);
 
-    // Split indicators drawn over the keys
+    // Split indicators in their own strip above the keys
     splitOverlay = std::make_unique<tdxui::SplitOverlay> (proc.apvts, keyboard);
-    splitOverlay->setBounds (keyboard.getBounds());
+    splitOverlay->setBounds (keyboard.getX(), kLowerY + 4, keyboard.getWidth(), kStrip);
     addAndMakeVisible (*splitOverlay);
     splitOverlay->refreshIfChanged();
 
