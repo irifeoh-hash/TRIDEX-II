@@ -27,6 +27,7 @@ public:
     explicit LedButton (const juce::String& name) : juce::Button (name) {}
     bool lit = false;            // used when not a toggle (programmer buttons)
     bool redCap = false;         // WRITE button
+    juce::Colour cap { 0xffb7b5ae };   // cap colour (grey, cream, green, orange, tan...)
     void paintButton (juce::Graphics&, bool over, bool down) override;
 };
 
@@ -129,14 +130,14 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 1850, kH = 510;
+    static constexpr int kW = 1850, kH = 536;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;
     void paint (juce::Graphics&) override;
 
 private:
-    struct Text { juce::Rectangle<float> r; juce::String s; float size; bool bold; juce::Justification j; };
+    struct Text { juce::Rectangle<float> r; juce::String s; float size; bool bold; juce::Justification j; juce::Colour col; };
     struct Bar  { float x1, x2, y; juce::String s; };
 
     juce::Slider& knob (const char* id, int cx, int cy, const juce::String& label, bool white, int size = 38);
@@ -146,8 +147,8 @@ private:
     juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,
-               juce::Justification j = juce::Justification::centred);
-    void moduleLabel (float x1, float x2, float y, const juce::String& s) { text ({ x1, y, x2 - x1, 12 }, s, 9.5f, true); }
+               juce::Justification j = juce::Justification::centred, juce::Colour col = {});
+    void moduleLabel (float x1, float x2, float y, const juce::String& s, juce::Colour c = {}) { text ({ x1, y, x2 - x1, 12 }, s, 9.5f, true, juce::Justification::centred, c); }
     void sectionBar (float x1, float x2, float y, const juce::String& s) { bars.push_back ({ x1, x2, y, s }); }
 
     void timerCallback() override;

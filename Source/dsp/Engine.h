@@ -124,6 +124,9 @@ struct Voice
     Adsr fenv, aenv;
     Ar brGateEnv, stEnv, bowEnv;
     bool brCut = false;          // brass gate being cut quickly (mono note change)
+    int pitchNote = -1;          // note the oscillators are actually playing
+    float fadeGain = 1.0f;       // declick: a stolen voice fades out before taking its new note
+    bool swapping = false;
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
 
     bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || stEnv.isActive(); }
@@ -239,6 +242,7 @@ public:
         const float attenGain = std::pow (10.0f, p.vcaAttenDb / 20.0f);
         const int v1Oct = 2 - std::clamp (p.v1Oct, 0, 2);   // footage index -> divider stage (0 = 4' core)
 
+        const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
         const double hostQnPerSample = hostBpm / 60.0 / sr;
         const double freeQnPerSample = std::max (20.0f, p.arpTempo) / 60.0 / sr;
 
@@ -293,8 +297,17 @@ public:
             {
                 if (! v.isActive()) { if (v.note >= 0 && ! v.keyDown) v.note = -1; continue; }
 
+                if (v.swapping)
+                {
+                    v.fadeGain -= fadeStep;
+                    if (v.fadeGain <= 0.0f) swapVoice (v);
+                }
+                // Smooth (S-curve) fade so the declick itself has no corners.
+                const float fg = v.swapping ? v.fadeGain * v.fadeGain * (3.0f - 2.0f * v.fadeGain) : 1.0f;
+                const float vg = fg * v.velocity;
+
                 v.wander += rng.bipolar() * 0.02f - v.wander * 0.0005f;
-                const float semis = (float) v.note + globalSemis + p.drift * (v.driftCents + v.wander) * 0.01f;
+                const float semis = (float) v.pitchNote + globalSemis + p.drift * (v.driftCents + v.wander) * 0.01f;
                 // 16' counter frequency = note - 12 semitones (8' = concert pitch)
                 const auto o1 = v.vco1.process (midiToHz (semis - 12.0f) * invSr);
 
@@ -314,9 +327,9 @@ public:
 
                     const float fe = v.fenv.process();
                     const float ae = v.aenv.process();
-                    const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.note - 60.0f) / 12.0f;
+                    const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.pitchNote - 60.0f) / 12.0f;
                     v.vcf.setCutoff (20.0f * std::exp2 (cutOct), p.res);
-                    synSum += v.vcf.process ((osc1 + osc2) * 0.35f) * ae * attenGain * v.velocity;
+                    synSum += v.vcf.process ((osc1 + osc2) * 0.35f) * ae * attenGain * vg;
                     if (! v.aenv.isActive()) v.vcf.reset();
                 }
 
@@ -336,11 +349,11 @@ public:
                     if (p.brPolyVcf)
                     {
                         // Own filter per note, half key tracking, swept by the shared brass EG.
-                        const float cutOct = p.brCutoff * 10.0f + p.brEgInt * brassEnv.value * 8.0f + 0.5f * ((float) v.note - 60.0f) / 12.0f;
+                        const float cutOct = p.brCutoff * 10.0f + p.brEgInt * brassEnv.value * 8.0f + 0.5f * ((float) v.pitchNote - 60.0f) / 12.0f;
                         v.brVcf.setCutoff (20.0f * std::exp2 (cutOct), p.brRes);
                         b = v.brVcf.process (b * 0.3f);
                     }
-                    brSum += b * g * v.velocity;
+                    brSum += b * g * vg;
                     if (! v.brGateEnv.isActive()) v.brVcf.reset();
                 }
 
@@ -350,8 +363,8 @@ public:
                     const float e = v.stEnv.process();
                     const float raw = (p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f);
                     const float sig = v.balLp2.process (v.balLp1.process (raw));
-                    stSum += sig * e * v.velocity;
-                    if (p.bowOn) bowSum += sig * v.bowEnv.value * e;
+                    stSum += sig * e * vg;
+                    if (p.bowOn) bowSum += sig * v.bowEnv.value * e * fg;
                     v.bowEnv.value *= bowDecay;
                 }
             }
@@ -394,10 +407,10 @@ public:
                 stringsVcfL.setCutoff (hz, p.stRes); stringsVcfR.setCutoff (hz, p.stRes);
                 sL = stringsVcfL.process (sL); sR = stringsVcfR.process (sR);
             }
-            sL = eqHiL.process (eqLoL.process (sL)) * p.stVolume;
+            sL = eqHiL.process (eqLoL.process (sL)) * p.stVolume * kStTrim;
             sR = eqHiR.process (eqLoR.process (sR)) * p.stVolume;
 
-            const float synth = synSum * p.synVolume;
+            const float synth = synSum * p.synVolume * kSynTrim;
 
             // ---- Flanger on selected sections
             float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f;
@@ -407,8 +420,8 @@ public:
             if (p.flSynth || p.flBrass || p.flStrings)
                 flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
 
-            outL[i] = softClip (dcL.process (dL + fL) * p.master);
-            outR[i] = softClip (dcR.process (dR + fR) * p.master);
+            outL[i] = outputStage (dcL.process (dL + fL) * p.master);
+            outR[i] = outputStage (dcR.process (dR + fR) * p.master);
         }
     }
 
@@ -469,6 +482,28 @@ private:
         std::array<std::array<int16_t, 128>, 3> a {};
         for (auto& r : a) r.fill (-1);
         return a;
+    }
+
+    // Completes a declick swap: the voice starts its new note from silence.
+    void swapVoice (Voice& v)
+    {
+        v.swapping = false;
+        v.fadeGain = 1.0f;
+        v.pitchNote = v.note;
+        v.fenv.reset(); v.aenv.reset();
+        if (v.synGate) { v.fenv.gateOn(); v.aenv.gateOn(); }
+        v.brGateEnv.value = 0.0f;
+        v.stEnv.value = 0.0f;
+        v.bowEnv.value = v.stGate ? 1.0f : 0.0f;
+        v.vcf.reset(); v.brVcf.reset();
+    }
+
+    // Clean up to -2 dBFS, then a soft knee towards 0 dBFS (only touches real overs).
+    static float outputStage (float x)
+    {
+        const float ax = std::abs (x);
+        if (ax < 0.8f) return x;
+        return std::copysign (0.8f + 0.2f * std::tanh ((ax - 0.8f) / 0.2f), x);
     }
 
     int brassThreshold() const { return p.trigSelect ? 2 * (std::clamp (p.silenceNote, 0, 3) + 1) : 1; }
@@ -533,7 +568,7 @@ private:
                     v.brGate = false;
                     v.brGateEnv.gate = false;
                     v.brCut = true;
-                    v.brGateEnv.set (0.002f, 0.006f, sr);
+                    v.brGateEnv.set (0.008f, 0.010f, sr);
                     if (! v.synGate && ! v.stGate) v.keyDown = false;
                     brassHeld = std::max (0, brassHeld - 1);
                 }
@@ -590,6 +625,9 @@ private:
             if (vp->keyDown) releaseSections (*vp, kAll, true);   // stolen while held: keep section counters right
         }
         Voice& v = *vp;
+        // A voice that is still sounding another pitch fades out first (no pop), then takes the note.
+        if (v.isActive() && v.pitchNote >= 0 && v.pitchNote != note) v.swapping = true;
+        else if (! v.swapping) { v.pitchNote = note; v.fadeGain = 1.0f; }
         v.note = note; v.keyDown = true;
         v.velocity = 1.0f - p.velSens * (1.0f - vel);
 
@@ -662,7 +700,7 @@ private:
                 v.balLp1.set (hz, sr); v.balLp2.set (hz, sr);
             }
             if (v.brCut && ! v.brGateEnv.isActive()) v.brCut = false;
-            v.brGateEnv.set (0.002f, v.brCut ? 0.006f : std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
+            v.brGateEnv.set (0.008f, v.brCut ? 0.010f : std::max (0.01f, p.brR), sr);   // gate stays open for the brass EG release
             v.stEnv.set (p.stAttack, p.stRelease, sr);
         }
         brassEnv.set (p.brA, p.brD, p.brS, p.brR);
@@ -673,6 +711,7 @@ private:
     }
 
     static constexpr float kDelayVibTime = 0.6f;   // fixed on the hardware
+    static constexpr float kSynTrim = 0.35f, kStTrim = 0.35f;   // gain staging: sections sit level with brass, with headroom
     float sr = 44100.0f;
     std::array<Voice, kVoices> voices;
     uint32_t ageCounter = 0;

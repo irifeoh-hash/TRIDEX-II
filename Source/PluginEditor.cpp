@@ -2,21 +2,33 @@
 
 namespace
 {
-// Trident Mk II-inspired palette: black panel, white legends, grey ("No. 2 Gray") knob
-// caps with white caps on the programmable synth knobs, cream switches, walnut cheeks.
-const juce::Colour kPanel  { 0xff111113 };
-const juce::Colour kPanel2 { 0xff19191c };
-const juce::Colour kWood   { 0xff4e2c18 };
-const juce::Colour kInk    { 0xffeeebe4 };
+// Palette after the original unit: warm charcoal panel, light-grey section header bars with
+// dark lettering, orange synthesizer legends, black knobs, role-coloured switches, walnut.
+const juce::Colour kPanel     { 0xff3a3935 };
+const juce::Colour kPanel2    { 0xff302f2c };
+const juce::Colour kLid       { 0xff1f1e1c };
+const juce::Colour kWood      { 0xff3e1d0f };
+const juce::Colour kInk       { 0xffece8de };
+const juce::Colour kOrange    { 0xffe8893a };
+const juce::Colour kHeader    { 0xffc3c0b7 };
+const juce::Colour kHeaderInk { 0xff2b2a27 };
+const juce::Colour kCapGrey   { 0xffb7b5ae };
+const juce::Colour kCapCream  { 0xffece8db };
+const juce::Colour kCapGreen  { 0xffa9c23c };
+const juce::Colour kCapOrange { 0xffeb8a34 };
+const juce::Colour kCapRed    { 0xffcf3426 };
+const juce::Colour kCapTan    { 0xff6e4a30 };
 const juce::Colour kLedOn  { 0xffff3a2a };
 const juce::Colour kLedOff { 0xff4a1612 };
 
 constexpr int kCol = 58;                 // column pitch
-constexpr int kRow1 = 82, kRow2 = 154;   // knob centre rows
-constexpr int kModY = 194;               // module names
-constexpr int kSwY = 210;                // switch strip top
-constexpr int kBarY = 272;               // section name bars
-constexpr int kLowerY = 296;             // joystick / arp / keyboard area
+constexpr int kHeadY = 42;               // section header bars (top)
+constexpr int kRow1 = 98, kRow2 = 170;   // knob centre rows
+constexpr int kModY = 210;               // module names
+constexpr int kSwY = 226;                // switch strip top
+constexpr int kBarY = 288;               // section name bars (bottom of the switch tier)
+constexpr int kLowerY = 312;             // joystick / keyboard area
+constexpr int kRail = 10;                // wooden rail under the keys
 constexpr int kKeysX = 312;              // keyboard starts here
 } // namespace
 
@@ -83,18 +95,19 @@ void PanelLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w,
     g.drawLine (juce::Line<float> (c.getPointOnCircumference (r * 0.78f, angle), c.getPointOnCircumference (r - 0.5f, angle)), 2.0f);
 
     const float kr = r * 0.74f;
-    const auto top = white ? juce::Colour (0xfff6f4ee) : juce::Colour (0xffb2b2ae);
-    const auto bot = white ? juce::Colour (0xffc6c2b8) : juce::Colour (0xff5c5c5a);
+    juce::ignoreUnused (white);
+    const auto top = juce::Colour (0xff3a3a3a);   // black knobs, as on the original
+    const auto bot = juce::Colour (0xff080808);
     g.setGradientFill (juce::ColourGradient (top, c.x, c.y - kr, bot, c.x, c.y + kr, false));
     g.fillEllipse (c.x - kr, c.y - kr, kr * 2, kr * 2);
     // soft top highlight
-    g.setColour (juce::Colours::white.withAlpha (white ? 0.35f : 0.18f));
+    g.setColour (juce::Colours::white.withAlpha (0.10f));
     g.fillEllipse (c.x - kr * 0.6f, c.y - kr * 0.85f, kr * 1.2f, kr * 0.7f);
     g.setColour (juce::Colours::black.withAlpha (0.45f));
     g.drawEllipse (c.x - kr, c.y - kr, kr * 2, kr * 2, 0.8f);
 
-    // Pointer groove on the cap
-    g.setColour (juce::Colour (0xff141414).withAlpha (0.9f));
+    // White index line on the cap
+    g.setColour (kInk);
     g.drawLine (juce::Line<float> (c.getPointOnCircumference (kr * 0.25f, angle), c.getPointOnCircumference (kr - 1.5f, angle)), 1.6f);
 }
 
@@ -105,7 +118,7 @@ void LedButton::paintButton (juce::Graphics& g, bool over, bool down)
     const bool on = getClickingTogglesState() ? getToggleState() : lit;
     const auto cap = b.reduced (5.0f, 1.5f);
 
-    const auto base = redCap ? juce::Colour (0xffc4402f) : juce::Colour (0xffece8dd);
+    const auto base = redCap ? kCapRed : this->cap;
     g.setColour (juce::Colours::black.withAlpha (0.6f));
     g.fillRoundedRectangle (cap.translated (0.0f, 1.5f).expanded (1.0f), 2.5f);
     g.setGradientFill (juce::ColourGradient (base.brighter (over ? 0.12f : 0.0f), cap.getX(), cap.getY(),
@@ -293,7 +306,7 @@ void Joystick::paint (juce::Graphics& g)
     const auto p = c + pos * range;
     g.setColour (juce::Colour (0xff2a2a2d));
     g.drawLine ({ c, p }, 7.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff505055), p.x, p.y - 9, juce::Colour (0xff121214), p.x, p.y + 9, false));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8a5434), p.x, p.y - 9, juce::Colour (0xff3a1e10), p.x, p.y + 9, false));
     g.fillEllipse (juce::Rectangle<float> (20, 20).withCentre (p));
 }
 
@@ -448,7 +461,7 @@ juce::Slider& TridexPanel::knob (const char* id, int cx, int cy, const juce::Str
     addAndMakeVisible (*s);
     sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, id, *s));
     if (label.isNotEmpty())
-        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f);
+        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f, false, juce::Justification::centred, white ? kOrange : juce::Colour());
     auto& ref = *s;
     owned.push_back (std::move (s));
     return ref;
@@ -474,6 +487,14 @@ tdxui::LedButton& TridexPanel::led (const char* id, int cx, int y, const juce::S
     b->setClickingTogglesState (true);
     b->setBounds (cx - 15, y, 30, 36);
     b->setTooltip (proc.apvts.getParameter (id)->getName (64));
+    {
+        // Cap colours by role, as on the original: green OUTPUT, cream footage, tan delay vibrato, grey otherwise.
+        const juce::String sid (id);
+        if (sid == "syn_on" || sid == "br_on" || sid == "st_on") b->cap = kCapGreen;
+        else if (sid == "br_16" || sid == "br_8" || sid == "st_16" || sid == "st_8" || sid == "st_4") b->cap = kCapCream;
+        else if (sid == "dvib_on") b->cap = kCapTan;
+        else b->cap = kCapGrey;
+    }
     addAndMakeVisible (*b);
     bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, id, *b));
     text ({ (float) cx - 18, (float) y + 38, 36, 20 }, label, 7.0f, false, juce::Justification::centredTop);
@@ -486,6 +507,7 @@ tdxui::LedButton& TridexPanel::progButton (const juce::String& label, int cx, in
 {
     auto b = std::make_unique<tdxui::LedButton> (label);
     b->setBounds (cx - 14, y, 28, 36);
+    b->cap = kCapOrange;
     b->onClick = std::move (onClick);
     addAndMakeVisible (*b);
     text ({ (float) cx - 20, (float) y + 38, 40, 10 }, label, 8.0f, true);
@@ -519,9 +541,9 @@ void TridexPanel::octave (const char* id, int cx, int y)
     text ({ (float) cx - 24, (float) y + 38, 48, 10 }, "OCTAVE", 7.0f);
 }
 
-void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j)
+void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j, juce::Colour col)
 {
-    texts.push_back ({ r, s, size, bold, j });
+    texts.push_back ({ r, s, size, bold, j, col });
 }
 
 //==============================================================================
@@ -583,18 +605,18 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         switchKnob ("v1_wave", col (1), kRow1, "WAVEFORM", true);
         knob ("pw_int", col (0), kRow2, "PW/PWM", true);
         knob ("pwm_speed", col (1), kRow2, "PWM SPEED", true);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1");
+        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1", kOrange);
 
         switchKnob ("v2_scale", col (2), kRow1, "OCTAVE", true);
         switchKnob ("v2_wave", col (3), kRow1, "WAVEFORM", true);
         knob ("v2_detune", col (2), kRow2, "DETUNE", true);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2");
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kOrange);
 
         knob ("cutoff", col (4), kRow1, "CUTOFF FREQ", true);
         knob ("res", col (5), kRow1, "RESONANCE", true);
         switchKnob ("kbd_track", col (4), kRow2, "KBD TRACK", true);
         knob ("eg_int", col (5), kRow2, "EG INTENSITY", true);
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF");
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF", kOrange);
 
         const char* fe[] = { "sf_a", "sf_d", "sf_s", "sf_r" };
         const char* ae[] = { "sa_a", "sa_d", "sa_s", "sa_r" };
@@ -604,12 +626,12 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             knob (fe[i], col (6 + i), kRow1, nm[i], true);
             knob (ae[i], col (6 + i), kRow2, nm[i], true);
         }
-        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true);
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG");
+        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true, juce::Justification::centred, kOrange);
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG", kOrange);
 
         knob ("vca_att", col (10), kRow1, "ATTENUATOR", true);
         led ("auto_damp", col (10), kRow2 - 22, "AUTO DAMP");
-        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA");
+        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kOrange);
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
         int bx = s0 + 16;
@@ -782,7 +804,11 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     // ---------------- Keyboard (61 keys, C-C)
     keyboard.setAvailableRange (36, 96);
     keyboard.setLowestVisibleKey (36);
-    keyboard.setBounds (kKeysX + 2, kLowerY + 6, kW - kKeysX - 32, kH - kLowerY - 12);
+    keyboard.setBounds (kKeysX + 2, kLowerY + 6, kW - kKeysX - 32, kH - kLowerY - 12 - kRail);
+    keyboard.setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour (0xfff2ecdc));
+    keyboard.setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour (0xff101010));
+    keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour (0xff8f8a7e));
+    keyboard.setColour (juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, juce::Colour (0x22e8893a));
     keyboard.setKeyWidth ((float) keyboard.getWidth() / 36.0f);
     keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, kLedOn.withAlpha (0.45f));
     keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha (0.35f));
@@ -861,22 +887,48 @@ void TridexPanel::paint (juce::Graphics& g)
             g.strokePath (grain, juce::PathStrokeType (0.7f));
         }
 
-    // Panel: deep black with a faint vertical sheen
-    g.setGradientFill (juce::ColourGradient (kPanel.brighter (0.06f), 0, 0, kPanel.darker (0.2f), 0, (float) kLowerY, false));
-    g.fillRect (24, 0, kW - 48, kLowerY);
-    // Hairlines between the top-row sections
-    {
-        std::vector<float> ends;
-        for (const auto& bar : bars) if (juce::approximatelyEqual (bar.y, (float) kBarY)) ends.push_back (bar.x2);
-        std::sort (ends.begin(), ends.end());
-        g.setColour (kInk.withAlpha (0.08f));
-        for (size_t i = 0; i + 1 < ends.size(); ++i)
-            g.fillRect (ends[i] + 5.5f, 46.0f, 1.0f, (float) kBarY - 40.0f);
-    }
+    // Top lid strip (header) and the main charcoal panel
+    g.setColour (kLid);
+    g.fillRect (24, 0, kW - 48, 38);
+    g.setGradientFill (juce::ColourGradient (kPanel.brighter (0.05f), 0, 38, kPanel.darker (0.12f), 0, (float) kLowerY, false));
+    g.fillRect (24, 38, kW - 48, kLowerY - 38);
+
+    // Switch tier: a second panel strip under the knobs, as on the hardware
     g.setColour (kPanel2);
-    g.fillRect (24, kLowerY, kKeysX - 24, kH - kLowerY);
+    g.fillRect (24, kSwY - 12, kW - 48, kBarY + 18 - (kSwY - 12));
+    g.setColour (juce::Colours::black.withAlpha (0.5f));
+    g.fillRect (24, kSwY - 13, kW - 48, 1);
+    g.setColour (kInk.withAlpha (0.10f));
+    g.fillRect (24, kSwY - 12, kW - 48, 1);
+
+    // Section header bars across the top (light grey, dark lettering) + dividers
+    {
+        const auto headFont = juce::Font (juce::FontOptions (10.0f, juce::Font::bold).withKerningFactor (0.10f));
+        std::vector<float> ends;
+        for (const auto& bar : bars)
+        {
+            if (! juce::approximatelyEqual (bar.y, (float) kBarY)) continue;
+            ends.push_back (bar.x2);
+            const auto r = juce::Rectangle<float> (bar.x1 - 2.0f, (float) kHeadY, bar.x2 - bar.x1 + 4.0f, 15.0f);
+            g.setGradientFill (juce::ColourGradient (kHeader.brighter (0.06f), 0, r.getY(), kHeader.darker (0.08f), 0, r.getBottom(), false));
+            g.fillRect (r);
+            g.setColour (kHeaderInk);
+            g.setFont (headFont);
+            g.drawText (bar.s, r, juce::Justification::centred);
+        }
+        std::sort (ends.begin(), ends.end());
+        g.setColour (juce::Colours::black.withAlpha (0.35f));
+        for (size_t i = 0; i + 1 < ends.size(); ++i)
+            g.fillRect (ends[i] + 5.5f, (float) kHeadY, 1.0f, (float) (kBarY + 16 - kHeadY));
+    }
+
+    // Lower area: joystick panel and the keybed, wooden rail under the keys
+    g.setColour (kPanel2.darker (0.15f));
+    g.fillRect (24, kLowerY, kKeysX - 24, kH - kLowerY - kRail);
     g.setColour (juce::Colours::black);
-    g.fillRect (kKeysX, kLowerY, kW - kKeysX - 24, kH - kLowerY);
+    g.fillRect (kKeysX, kLowerY, kW - kKeysX - 24, kH - kLowerY - kRail);
+    g.setGradientFill (juce::ColourGradient (kWood.brighter (0.25f), 0, (float) (kH - kRail), kWood.darker (0.3f), 0, (float) kH, false));
+    g.fillRect (0, kH - kRail, kW, kRail);
 
     // Header: original wordmark + program display
     g.setColour (kInk);
@@ -897,7 +949,7 @@ void TridexPanel::paint (juce::Graphics& g)
 
     for (const auto& t : texts)
     {
-        g.setColour (kInk.withAlpha (0.92f));
+        g.setColour (t.col.isTransparent() ? kInk.withAlpha (0.92f) : t.col);
         g.setFont (juce::FontOptions (t.size * 0.96f, t.bold ? juce::Font::bold : juce::Font::plain).withKerningFactor (0.05f));
         g.drawFittedText (t.s, t.r.toNearestInt(), t.j, 2, 0.75f);
     }
@@ -909,9 +961,9 @@ void TridexPanel::paint (juce::Graphics& g)
     {
         const float tw = juce::GlyphArrangement::getStringWidth (barFont, b.s) + 14.0f;
         const float mid = (b.x1 + b.x2) * 0.5f;
-        g.setColour (kInk.withAlpha (0.85f));
-        g.fillRect (b.x1, b.y + 4.0f, mid - tw * 0.5f - b.x1, 3.0f);
-        g.fillRect (mid + tw * 0.5f, b.y + 4.0f, b.x2 - (mid + tw * 0.5f), 3.0f);
+        g.setColour (kInk.withAlpha (0.7f));
+        g.fillRect (b.x1, b.y + 5.0f, mid - tw * 0.5f - b.x1, 1.5f);
+        g.fillRect (mid + tw * 0.5f, b.y + 5.0f, b.x2 - (mid + tw * 0.5f), 1.5f);
         g.setColour (kInk);
         g.drawText (b.s, juce::Rectangle<float> (mid - tw * 0.5f, b.y - 2.0f, tw, 14.0f), juce::Justification::centred);
     }

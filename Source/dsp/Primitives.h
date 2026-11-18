@@ -81,6 +81,8 @@ struct Adsr
 
     void set (float a, float d, float s, float r)
     {
+        a = std::max (a, 0.0015f);   // shortest attack/release stay click-free
+        r = std::max (r, 0.004f);
         constexpr float attackTarget = 1.3f;
         aCoef = coef (a / std::log (attackTarget / (attackTarget - 1.0f)));
         dCoef = coef (d / 4.6f);   // ~-40 dB in d seconds
