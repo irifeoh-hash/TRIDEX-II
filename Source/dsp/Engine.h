@@ -144,6 +144,7 @@ struct Voice
     int pitchNote = -1;          // note the oscillators are actually playing
     float glidePitch = 60.0f, glideTarget = 60.0f, glideCoef = 1.0f;   // portamento / glissando state
     bool gliss = false, glideInit = false;
+    float vcaSlew = 0.0f;        // analog-style VCA slew (~0.7 ms): softens envelope edges without dulling attacks
     float fadeGain = 1.0f;       // declick: a stolen voice fades out before taking its new note
     bool swapping = false;
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
@@ -246,7 +247,7 @@ public:
     void allNotesOff()
     {
         for (int s = 0; s < 3; ++s) arps[(size_t) s].clear ([this, s] (int n) { voiceOff (n, 1 << s); });
-        monoCurrent = -1; monoCount = 0; sCurrent = -1; sCount = 0;
+        monoCurrent = -1; monoCount = 0; sCurrent = -1; sCount = 0; sVoice = bVoice = -1;
         for (auto& v : voices) if (v.keyDown) releaseSections (v, kAll, false);
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         heldCount = 0;
@@ -263,6 +264,7 @@ public:
 
         const float fadeStep = 1.0f / (0.003f * sr);   // 3 ms steal fade
         const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
+        const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const float brassMixNorm = 1.0f / std::sqrt ((float) brassOscs);
         const double hostQnPerSample = hostBpm / 60.0 / sr;
@@ -353,7 +355,9 @@ public:
                     }
 
                     const float fe = v.fenv.process();
-                    const float ae = v.aenv.process();
+                    const float aeRaw = v.aenv.process();
+                    v.vcaSlew += (aeRaw - v.vcaSlew) * vcaSlewCoef;
+                    const float ae = v.vcaSlew;
                     const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.pitchNote - 60.0f) / 12.0f;
                     v.vcf.setCutoff (20.0f * std::exp2 (cutOct), p.res);
                     synSum += v.vcf.process ((osc1 + osc2) * 0.35f) * ae * attenGain * vg;
@@ -615,51 +619,90 @@ private:
         return k;
     }
 
+    // ---- True monophonic behaviour (Minimoog / Pro-One style) --------------------------
+    // Each mono part owns ONE voice that keeps running: a new key retunes it in place, so the
+    // oscillator phase and filter state carry straight through (no voice switch, no click).
+    // LEGATO: with a key held nothing restarts. RETRIG: the envelope re-attacks from its current level.
+
+    // The part's mono voice, if it is still ours and not shared with another section.
+    Voice* monoVoice (int idx, int expectedNote, int section)
+    {
+        if (idx < 0) return nullptr;
+        auto& v = voices[(size_t) idx];
+        if (! v.isActive() || v.note != expectedNote) return nullptr;
+        if (section == 0 && (v.brGate || v.stGate)) return nullptr;
+        if (section == 1 && (v.synGate || v.stGate)) return nullptr;
+        return &v;
+    }
+
+    int findVoice (int note, int bit) const
+    {
+        for (int i = 0; i < kVoices; ++i)
+        {
+            const auto& v = voices[(size_t) i];
+            if (v.keyDown && v.note == note && ((bit == kSyn && v.synGate) || (bit == kBr && v.brGate))) return i;
+        }
+        return -1;
+    }
+
+    // Retune a mono voice in place (glide if the part's GLIDE TIME is up).
+    void retuneMono (Voice& v, int note, float vel, int section)
+    {
+        v.note = note; v.pitchNote = note; v.keyDown = true;
+        v.velocity = 1.0f - p.velSens * (1.0f - vel);
+        v.swapping = false; v.fadeGain = 1.0f; v.glideInit = true;
+        const float gt = section == 0 ? p.synGlide : p.brGlide;
+        if (gt > 0.001f)
+        {
+            v.glideTarget = (float) note;
+            v.glideCoef = 1.0f - std::exp (-1.0f / (std::max (0.001f, gt * 0.25f) * sr));
+            v.gliss = section == 0 ? p.synGliss : p.brGliss;
+        }
+        else { v.glidePitch = v.glideTarget = (float) note; v.glideCoef = 1.0f; v.gliss = false; }
+        lastNote[(size_t) section] = note;
+    }
+
     void synthMonoOn (int note, float vel)
     {
         sRemove (note);
         if (sCount < (int) sStack.size()) { sStack[(size_t) sCount] = note; sVel[(size_t) sCount] = vel; ++sCount; }
         const int k = pickByPriority (sStack, sCount);
-        if (k >= 0) synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k]);
+        if (k >= 0) synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k], sStack[(size_t) k] == note);
     }
 
     void synthMonoOff (int note)
     {
         sRemove (note);
         if (note != sCurrent) { voiceOffRaw (note, kSyn); return; }
-        if (sCount > 0) { const int k = pickByPriority (sStack, sCount); synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k]); }
-        else { voiceOffRaw (sCurrent, kSyn); sCurrent = -1; }
+        if (sCount > 0) { const int k = pickByPriority (sStack, sCount); synthMonoSwitchTo (sStack[(size_t) k], sVel[(size_t) k], false); return; }
+        if (auto* mv = monoVoice (sVoice, sCurrent, 0))
+        {
+            mv->synGate = false; mv->fenv.gateOff(); mv->aenv.gateOff();
+            mv->keyDown = mv->brGate || mv->stGate;
+        }
+        else voiceOffRaw (sCurrent, kSyn);
+        sCurrent = -1;
     }
 
-    void synthMonoSwitchTo (int note, float vel)
+    // press = a key was just pressed (vs. falling back to a still-held key on release).
+    void synthMonoSwitchTo (int note, float vel, bool press)
     {
-        if (sCurrent >= 0 && sCurrent != note)
+        if (auto* mv = monoVoice (sVoice, sCurrent >= 0 ? sCurrent : sVoiceNote, 0))
         {
-            bool legato = false;
-            Adsr::Stage fs = Adsr::Idle, as = Adsr::Idle;
-            float fv = 0.0f, av = 0.0f;
-            for (auto& v : voices)
-                if (v.keyDown && v.note == sCurrent && v.synGate)
-                {
-                    legato = true;
-                    fs = v.fenv.stage; fv = v.fenv.value; as = v.aenv.stage; av = v.aenv.value;
-                    releaseSections (v, kSyn, false);
-                    v.damped = true;                       // old note cut quickly (6 ms)
-                }
-            voiceOnRaw (note, vel, kSyn);
-            if (legato && p.synLegato)                    // RETRIG mode: the new note starts its envelopes fresh
-                for (auto& v : voices)
-                    if (v.keyDown && v.note == note && v.synGate)
-                    {
-                        v.fenv.stage = fs; v.fenv.value = fv;
-                        v.aenv.stage = as; v.aenv.value = av;
-                    }
+            const bool keyWasHeld = mv->synGate;
+            retuneMono (*mv, note, vel, 0);
+            mv->damped = false;
+            if (! keyWasHeld) { mv->synGate = true; mv->fenv.gateOn(); mv->aenv.gateOn(); }   // new press: re-attack from current level
+            else if (press && ! p.synLegato) { mv->fenv.gateOn(); mv->aenv.gateOn(); }      // RETRIG: re-attack from current level
+            sVoiceNote = note;
         }
-        else if (sCurrent != note)
-            voiceOnRaw (note, vel, kSyn);
         else
-            for (auto& v : voices)
-                if (v.keyDown && v.note == note && v.synGate) { v.fenv.gateOn(); v.aenv.gateOn(); }   // same note again: retrigger
+        {
+            if (sCurrent >= 0) voiceOffRaw (sCurrent, kSyn);
+            voiceOnRaw (note, vel, kSyn);
+            sVoice = findVoice (note, kSyn);
+            sVoiceNote = note;
+        }
         sCurrent = note;
     }
 
@@ -679,41 +722,49 @@ private:
         monoRemove (note);
         if (monoCount < (int) monoStack.size()) { monoStack[(size_t) monoCount] = note; monoVel[(size_t) monoCount] = vel; ++monoCount; }
         const int k = pickByPriority (monoStack, monoCount);
-        if (k >= 0) monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k]);
+        if (k >= 0) monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k], monoStack[(size_t) k] == note);
     }
 
     void brassMonoOff (int note)
     {
         monoRemove (note);
         if (note != monoCurrent) { voiceOffRaw (note, kBr); return; }   // e.g. held from before MONO was switched on
-        if (monoCount > 0) { const int k = pickByPriority (monoStack, monoCount); monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k]); }
-        else { voiceOffRaw (monoCurrent, kBr); monoCurrent = -1; }
+        if (monoCount > 0) { const int k = pickByPriority (monoStack, monoCount); monoSwitchTo (monoStack[(size_t) k], monoVel[(size_t) k], false); return; }
+        if (auto* mv = monoVoice (bVoice, monoCurrent, 1))
+        {
+            mv->brGate = false; mv->brGateEnv.gate = false;
+            mv->keyDown = mv->synGate || mv->stGate;
+            const bool wasOn = brassHeld >= brassThreshold();
+            brassHeld = std::max (0, brassHeld - 1);
+            if (wasOn && brassHeld < brassThreshold()) brassEnv.gateOff();
+        }
+        else voiceOffRaw (monoCurrent, kBr);
+        monoCurrent = -1;
     }
 
-    void monoSwitchTo (int note, float vel)
+    void monoSwitchTo (int note, float vel, bool press)
     {
-        if (monoCurrent >= 0 && monoCurrent != note)
+        if (auto* mv = monoVoice (bVoice, monoCurrent >= 0 ? monoCurrent : bVoiceNote, 1))
         {
-            // Cut the old brass note quickly. With MULTIPLE TRIGGER off the change is
-            // legato: the shared brass EG carries on instead of restarting.
-            for (auto& v : voices)
-                if (v.keyDown && v.note == monoCurrent && v.brGate)
-                {
-                    v.brGate = false;
-                    v.brGateEnv.gate = false;
-                    v.brCut = true;
-                    v.brGateEnv.set (0.008f, 0.010f, sr);
-                    if (! v.synGate && ! v.stGate) v.keyDown = false;
-                    brassHeld = std::max (0, brassHeld - 1);
-                }
-            suppressBrassTrigger = p.brLegato && brassHeld + 1 >= brassThreshold();   // LEGATO: no retrigger while a key is held
-            voiceOnRaw (note, vel, kBr);
-            suppressBrassTrigger = false;
+            const bool keyWasHeld = mv->brGate;
+            retuneMono (*mv, note, vel, 1);
+            if (! keyWasHeld)
+            {
+                // New press while the mono voice is releasing: reopen it; the brass EG re-attacks from its level.
+                mv->brGate = true; mv->brGateEnv.gate = true; mv->brCut = false;
+                ++brassHeld;
+                if (brassHeld >= brassThreshold()) brassEnv.gateOn();
+            }
+            else if (press && ! p.brLegato) brassEnv.gateOn();                              // RETRIG: re-attack from current level
+            bVoiceNote = note;
         }
-        else if (monoCurrent != note)
+        else
+        {
+            if (monoCurrent >= 0) voiceOffRaw (monoCurrent, kBr);
             voiceOnRaw (note, vel, kBr);
-        else if (! p.brLegato)
-            brassEnv.gateOn();   // same note again (e.g. arp repeat): retrigger in RETRIG mode
+            bVoice = findVoice (note, kBr);
+            bVoiceNote = note;
+        }
         monoCurrent = note;
     }
 
@@ -882,7 +933,7 @@ private:
     bool suppressBrassTrigger = false, lastBrMono = false, lastSynMono = false;
     std::array<int, 128> sStack {};
     std::array<float, 128> sVel {};
-    int sCount = 0, sCurrent = -1;
+    int sCount = 0, sCurrent = -1, sVoice = -1, sVoiceNote = -1, bVoice = -1, bVoiceNote = -1;
 
     DelayLine stVib;
     double stVibPhase = 0.0;
