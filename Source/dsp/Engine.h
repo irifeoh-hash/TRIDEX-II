@@ -183,6 +183,7 @@ public:
         }
         brassVcf.prepare (sr); brassEnv.prepare (sr);
         stringsVcfL.prepare (sr); stringsVcfR.prepare (sr);
+        for (auto* f : { &stSmoothL1, &stSmoothL2, &stSmoothR1, &stSmoothR2 }) { *f = {}; f->set (9000.0f, sr); }
         stVib.prepare (0.03f, sr);
         ensemble.prepare (sr);
         for (auto& f : flangers) f.prepare (sr);
@@ -275,6 +276,8 @@ public:
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
+        const int stringFeet = std::max (1, (p.st16 ? 1 : 0) + (p.st8 ? 1 : 0) + (p.st4 ? 1 : 0));
+        const float stMixNorm = 1.0f / std::sqrt ((float) stringFeet);
         const float brassMixNorm = 1.0f / std::sqrt ((float) brassOscs);
         const double hostQnPerSample = hostBpm / 60.0 / sr;
         const double freeQnPerSample = std::max (20.0f, p.arpTempo) / 60.0 / sr;
@@ -325,7 +328,7 @@ public:
             if (p.v1Wave == Vco1Wave::PWM) pw = 0.5f * (1.0f - p.pwInt * 1.25f * (0.5f + 0.5f * pwmTri));
             pw = std::max (0.0f, pw);
 
-            float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f, brWeight = 0.0f;
+            float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f, brWeight = 0.0f, stWeight = 0.0f;
             bool brassGateOpen = false;
 
             for (auto& v : voices)
@@ -412,7 +415,8 @@ public:
                 if (v.stEnv.isActive())
                 {
                     const float e = v.stEnv.process();
-                    const float raw = (p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f);
+                    const float raw = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * stMixNorm;
+                    stWeight += e;
                     const float sig = v.balLp2.process (v.balLp1.process (raw));
                     stSum += sig * e * vg;
                     if (p.bowOn) bowSum += sig * v.bowEnv.value * e * fg;
@@ -445,7 +449,9 @@ public:
 
             // ---- Strings chain (KLM-404)
             stVibEnv = std::min (1.0f, stVibEnv + float (invSr / std::max (0.01f, p.vibDelay)));
-            float s = stSum * 0.22f;
+            // Voice-count compensation (1/sqrt(notes sounding), following the envelopes) keeps chords
+            // from piling up into the ensemble and filter; makeup gain comes after (kStTrim).
+            float s = stSum * 0.22f / std::sqrt (std::max (1.0f, stWeight));
             if (p.vibOn)
             {
                 stVibPhase += p.vibSpeed * invSr; if (stVibPhase >= 1.0) stVibPhase -= 1.0;
@@ -460,6 +466,9 @@ public:
                 const float b = bowBp.process (bowSum * 0.22f) * p.bowLevel * 2.0f;
                 sL += b; sR += b;
             }
+            // Gentle string-machine smoothing (~9 kHz, 12 dB/oct) takes the raw sawtooth fizz off.
+            sL = stSmoothL2.process (stSmoothL1.process (sL));
+            sR = stSmoothR2.process (stSmoothR1.process (sR));
             if (p.stCutoff < 0.999f || p.stRes > 0.001f)
             {
                 // Strings VCF (Tridex II), after the ensemble so it shapes the whole section.
@@ -967,7 +976,7 @@ private:
     }
 
     static constexpr float kDelayVibTime = 0.6f;   // fixed on the hardware
-    static constexpr float kSynTrim = 0.35f, kStTrim = 0.35f;   // gain staging: sections sit level with brass, with headroom
+    static constexpr float kSynTrim = 0.35f, kStTrim = 1.25f;   // gain staging: sections sit level with brass, with headroom
     // Brass filter staging: feed the (shared, paraphonic) filter gently, make the level up afterwards.
     static constexpr float kBrassIn = 0.20f, kBrassMakeup = 2.4f;
     float sr = 44100.0f;
@@ -976,6 +985,7 @@ private:
     int nextVoice = 0;
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
+    OnePoleLP stSmoothL1, stSmoothL2, stSmoothR1, stSmoothR2;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;
     std::array<int, 128> monoStack {};
