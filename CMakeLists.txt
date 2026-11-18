@@ -45,7 +45,7 @@ juce_add_plugin(Tridex80
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
 # Embedded artwork (I Rife logo)
-juce_add_binary_data(TridexAssets SOURCES Resources/irife_logo.png)
+juce_add_binary_data(TridexAssets SOURCES Resources/irife_logo.png Resources/tridex_logo.png)
 set_target_properties(TridexAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_sources(Tridex80 PRIVATE

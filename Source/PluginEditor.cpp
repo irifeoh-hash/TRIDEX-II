@@ -604,9 +604,12 @@ void AboutPage::paint (juce::Graphics& g)
         g.drawImageWithin (logo, 40, 70, 250, 120, juce::RectanglePlacement::centred);
     }
 
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (30.0f, juce::Font::bold).withKerningFactor (0.12f));
-    g.drawText ("TRIDEX II", 330, 60, 500, 40, juce::Justification::centredLeft);
+    static const juce::Image wordmark = juce::ImageCache::getFromMemory (BinaryData::tridex_logo_png, BinaryData::tridex_logo_pngSize);
+    if (wordmark.isValid())
+    {
+        g.setOpacity (1.0f);
+        g.drawImageWithin (wordmark, 330, 52, 260, 44, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
+    }
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold).withKerningFactor (0.08f));
     g.setColour (kInk);
     g.drawText ("PERFORMING KEYBOARD  /  BY I RIFE", 330, 98, 500, 18, juce::Justification::centredLeft);
@@ -1438,7 +1441,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
     }
 
-    lcd = { 276, 9, 130, 24 };
+    lcd = { 300, 9, 130, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
@@ -1464,7 +1467,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     aboutPage->setBounds (24, 40, kW - 48, kLowerY - 40);
     addChildComponent (*aboutPage);
     logoHotspot = std::make_unique<tdxui::LogoHotspot>();
-    logoHotspot->setBounds (166, 2, 100, 34);
+    logoHotspot->setBounds (188, 2, 100, 34);
     logoHotspot->setTooltip ("About Tridex II");
     logoHotspot->onClick = [this]
     {
@@ -1654,13 +1657,13 @@ void TridexPanel::paint (juce::Graphics& g)
     g.fillRect (0, kH - kRail, kW, kRail);
 
     // Header: original wordmark + program display
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (21.0f, juce::Font::bold).withKerningFactor (0.12f));
-    g.drawText ("TRIDEX II", 36, 6, 200, 30, juce::Justification::centredLeft);
+    static const juce::Image wordmark = juce::ImageCache::getFromMemory (BinaryData::tridex_logo_png, BinaryData::tridex_logo_pngSize);
+    if (wordmark.isValid())
+        g.drawImageWithin (wordmark, 34, 5, 150, 29, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
     // I Rife logo, small, beside the wordmark
     static const juce::Image logo = juce::ImageCache::getFromMemory (BinaryData::irife_logo_png, BinaryData::irife_logo_pngSize);
     if (logo.isValid())
-        g.drawImageWithin (logo, 168, 3, 96, 32, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid | juce::RectanglePlacement::onlyReduceInSize);
+        g.drawImageWithin (logo, 190, 3, 96, 32, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid | juce::RectanglePlacement::onlyReduceInSize);
 
     g.setColour (juce::Colour (0xff1d0705));
     g.fillRoundedRectangle (lcd.toFloat(), 3.0f);
