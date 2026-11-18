@@ -58,6 +58,8 @@ int main (int argc, char** argv)
     sp.splits = { 64, 50, 58 }; fails += render ("splits", sp, out);
     tdx::Params gp; gp.stOn = true; for (auto& g : gp.gate) { g.on = true; g.rate = 3; g.left = { 1, 0, 1, 0, 1, 1, 0, 1 }; g.right = { 0, 1, 0, 1, 1, 0, 1, 1 }; }
     gp.gate[1].sync = false; fails += render ("stepgate", gp, out);
+    tdx::Params gl; gl.brOn = true; gl.synGlide = 0.3f; gl.brGlide = 0.5f; gl.brGliss = true; gl.brMono = true;
+    fails += render ("glide", gl, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }

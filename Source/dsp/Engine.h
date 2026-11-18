@@ -59,6 +59,8 @@ struct Params
     bool multiTrig = true, trigSelect = false; int silenceNote = 0;   // silenceNote: 0..3 -> 2,4,6,8 keys
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
+    float synGlide = 0.0f, brGlide = 0.0f;              // Tridex II: glide time in seconds (0 = off)
+    bool synGliss = false, brGliss = false;             // false = portamento (smooth), true = glissando (semitone steps)
 
     // ---- Strings section
     bool stOn = false; Zone stZone = Zone::Both; float stVolume = 0.6f;
@@ -137,6 +139,8 @@ struct Voice
     Ar brGateEnv, stEnv, bowEnv;
     bool brCut = false;          // brass gate being cut quickly (mono note change)
     int pitchNote = -1;          // note the oscillators are actually playing
+    float glidePitch = 60.0f, glideTarget = 60.0f, glideCoef = 1.0f;   // portamento / glissando state
+    bool gliss = false, glideInit = false;
     float fadeGain = 1.0f;       // declick: a stolen voice fades out before taking its new note
     bool swapping = false;
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
@@ -322,7 +326,10 @@ public:
                 const float vg = fg * v.velocity;
 
                 v.wander += rng.bipolar() * 0.02f - v.wander * 0.0005f;
-                const float semis = (float) v.pitchNote + globalSemis + p.drift * (v.driftCents + v.wander) * 0.01f;
+                // Glide: exponential slide towards the target; glissando quantises it to semitones.
+                v.glidePitch += (v.glideTarget - v.glidePitch) * v.glideCoef;
+                const float basePitch = v.gliss ? std::round (v.glidePitch) : v.glidePitch;
+                const float semis = basePitch + globalSemis + p.drift * (v.driftCents + v.wander) * 0.01f;
                 // 16' counter frequency = note - 12 semitones (8' = concert pitch)
                 const auto o1 = v.vco1.process (midiToHz (semis - 12.0f) * invSr);
 
@@ -534,6 +541,8 @@ private:
         v.swapping = false;
         v.fadeGain = 1.0f;
         v.pitchNote = v.note;
+        v.glidePitch = v.glideTarget = (float) v.note;
+        v.glideCoef = 1.0f; v.gliss = false;
         v.fenv.reset(); v.aenv.reset();
         if (v.synGate) { v.fenv.gateOn(); v.aenv.gateOn(); }
         v.brGateEnv.value = 0.0f;
@@ -669,9 +678,29 @@ private:
             if (vp->keyDown) releaseSections (*vp, kAll, true);   // stolen while held: keep section counters right
         }
         Voice& v = *vp;
-        // A voice that is still sounding another pitch fades out first (no pop), then takes the note.
-        if (v.isActive() && v.pitchNote >= 0 && v.pitchNote != note) v.swapping = true;
-        else if (! v.swapping) { v.pitchNote = note; v.fadeGain = 1.0f; }
+        // Glide (Tridex II): Synth or Brass portamento/glissando from the previous note.
+        const int gsec = (mask & kSyn) ? 0 : ((mask & kBr) ? 1 : -1);
+        const float gtime = gsec == 0 ? p.synGlide : (gsec == 1 ? p.brGlide : 0.0f);
+        if (gsec >= 0 && gtime > 0.001f)
+        {
+            float start = (float) note;
+            if (v.isActive() && v.glideInit) start = v.glidePitch;                // carry on from where this voice is
+            else if (lastNote[(size_t) gsec] >= 0) start = (float) lastNote[(size_t) gsec];
+            // A continuous slide never clicks, so no steal fade is needed.
+            v.swapping = false; v.fadeGain = 1.0f; v.pitchNote = note;
+            v.glidePitch = start; v.glideTarget = (float) note; v.glideInit = true;
+            v.glideCoef = 1.0f - std::exp (-1.0f / (std::max (0.001f, gtime * 0.25f) * sr));   // ~98 % of the way in GLIDE TIME
+            v.gliss = gsec == 0 ? p.synGliss : p.brGliss;
+        }
+        // Otherwise: a voice still sounding another pitch fades out first (no pop), then takes the note.
+        else if (v.isActive() && v.pitchNote >= 0 && v.pitchNote != note) { v.swapping = true; }
+        else if (! v.swapping)
+        {
+            v.pitchNote = note; v.fadeGain = 1.0f;
+            v.glidePitch = v.glideTarget = (float) note; v.glideCoef = 1.0f; v.gliss = false; v.glideInit = true;
+        }
+        if (mask & kSyn) lastNote[0] = note;
+        if (mask & kBr)  lastNote[1] = note;
         v.note = note; v.keyDown = true;
         v.velocity = 1.0f - p.velSens * (1.0f - vel);
 
@@ -784,6 +813,7 @@ private:
     std::array<Arp, 3> arps;
     double hostBpm = 120.0, hostPpq = 0.0;
     std::array<double, 3> gateFreeQn {};
+    std::array<int, 2> lastNote { -1, -1 };   // last note started in Synth / Brass (glide source)
     std::array<float, 3> gateL { 1.0f, 1.0f, 1.0f }, gateR { 1.0f, 1.0f, 1.0f };
 public:
     std::array<std::atomic<int>, 3> gateStepUi { -1, -1, -1 };   // current step per section, for the editor

@@ -882,6 +882,10 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         knob ("vca_att", col (10), kRow1, "ATTENUATOR", true);
         led ("auto_damp", col (10), kRow2 - 22, "AUTO DAMP");
         moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kOrange);
+        // Tridex II: glide (portamento / glissando)
+        knob ("syn_glide", col (11), kRow1, "GLIDE TIME", true);
+        switchKnob ("syn_gliss", col (11), kRow2, "MODE", true);
+        moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kOrange);
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
         int bx = s0 + 16;
@@ -896,10 +900,10 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             progBtns[(size_t) i] = &progButton (juce::String (i + 1), bx += 30, kSwY, [this, i] { programPressed (i); });
         text ({ (float) s0 + 80, (float) kSwY + 50, 360, 10 }, "PROGRAMMER", 8.0f, true);
 
-        octave ("syn_octsh", s0 + 11 * kCol - 118, kSwY);
-        knob ("syn_vol", s0 + 11 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
-        led ("syn_on", s0 + 11 * kCol - 20, kSwY, "OUTPUT");
-        auto [a, b] = sectionEnd (11);
+        octave ("syn_octsh", s0 + 12 * kCol - 118, kSwY);
+        knob ("syn_vol", s0 + 12 * kCol - 62, kSwY + 18, "VOLUME", false, 30);
+        led ("syn_on", s0 + 12 * kCol - 20, kSwY, "OUTPUT");
+        auto [a, b] = sectionEnd (12);
         sectionBar ((float) a, (float) b, kBarY, "SYNTHESIZER");
     }
 
@@ -936,7 +940,11 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         // Tridex II: per-note brass filter switch
         led ("br_polyvcf", col (6), kRow1 - 22, "POLY VCF");
         moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, kModY, "VCF MODE");
-        auto [a, b] = sectionEnd (7);
+        // Tridex II: glide (portamento / glissando)
+        knob ("br_glide", col (7), kRow1, "GLIDE TIME", false);
+        switchKnob ("br_gliss", col (7), kRow2, "MODE", false);
+        moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, kModY, "GLIDE");
+        auto [a, b] = sectionEnd (8);
         sectionBar ((float) a, (float) b, kBarY, "BRASS");
     }
 
