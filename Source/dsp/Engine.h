@@ -36,6 +36,8 @@ struct Params
     std::array<int, 3> octShift {};                     // Tridex II: per-part octave shift -2..+2 (Synth, Brass, Strings)
     bool flSynth = false, flBrass = false, flStrings = false;
     float flManual = 0.4f, flIntensity = 0.5f, flFeedback = 0.4f, flSpeed = 0.3f;
+    bool chOn = false, chSynth = true, chBrass = false, chStrings = false;   // Tridex II chorus / ensemble
+    int chMode = 0, chSpace = 1; float chRate = 0.6f, chDepth = 0.5f, chMix = 0.5f, chWidth = 0.7f, chTone = 0.6f;
     float drift = 0.3f, velSens = 0.0f;
     int pedalMode = 2;                                  // 0 = off, 1 = damper (S-1, Trident), 2 = hold (modern sustain)
 
@@ -182,6 +184,7 @@ public:
         stVib.prepare (0.03f, sr);
         ensemble.prepare (sr);
         flanger.prepare (sr);
+        chorus.prepare (sr);
         for (auto* d : { &dcL, &dcR }) *d = {};
         brassHeld = stringsHeld = 0; nextVoice = 0;
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
@@ -472,11 +475,26 @@ public:
             }
 
             // ---- Flanger on selected sections
-            float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f;
-            (p.flSynth   ? fL : dL) += synth * gl[0]; (p.flSynth   ? fR : dR) += synth * gr[0];
-            (p.flBrass   ? fL : dL) += brass * gl[1]; (p.flBrass   ? fR : dR) += brass * gr[1];
-            (p.flStrings ? fL : dL) += sL * gl[2];    (p.flStrings ? fR : dR) += sR * gr[2];
-            if (p.flSynth || p.flBrass || p.flStrings)
+            // Routing: chorus-selected parts go through the chorus first; flanger-selected parts
+            // (and the chorus output, if any chorused part is also flanger-selected) through the flanger.
+            float fL = 0.0f, fR = 0.0f, dL = 0.0f, dR = 0.0f, cL = 0.0f, cR = 0.0f;
+            const bool chorusActive = p.chOn && (p.chSynth || p.chBrass || p.chStrings);
+            bool chorusToFlanger = false;
+            const auto route = [&] (bool ch, bool fl, float l, float r)
+            {
+                if (chorusActive && ch) { cL += l; cR += r; chorusToFlanger |= fl; }
+                else if (fl)            { fL += l; fR += r; }
+                else                    { dL += l; dR += r; }
+            };
+            route (p.chSynth,   p.flSynth,   synth * gl[0], synth * gr[0]);
+            route (p.chBrass,   p.flBrass,   brass * gl[1], brass * gr[1]);
+            route (p.chStrings, p.flStrings, sL * gl[2],    sR * gr[2]);
+            if (chorusActive)
+            {
+                chorus.process (cL, cR, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
+                if (chorusToFlanger) { fL += cL; fR += cR; } else { dL += cL; dR += cR; }
+            }
+            if (p.flSynth || p.flBrass || p.flStrings || chorusToFlanger)
                 flanger.process (fL, fR, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
 
             outL[i] = outputStage (dcL.process (dL + fL) * p.master);
@@ -941,6 +959,7 @@ private:
     Biquad bowBp, eqLoL, eqLoR, eqHiL, eqHiR;
     Ensemble ensemble;
     Flanger flanger;
+    StereoChorus chorus;
 
     std::array<bool, 128> held {}, sustained {};
     std::array<uint8_t, 128> keyMask {}, arpMask {};   // per held key: sections played directly / via arp

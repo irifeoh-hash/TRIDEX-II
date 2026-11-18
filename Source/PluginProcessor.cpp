@@ -58,6 +58,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "fl_fb",      "Flanger Feedback", unit, 0.4f);
     addF (l, "fl_speed",   "Flanger Speed", NR (0.05f, 8.0f, 0.0f, 0.4f), 0.3f, "Hz");
 
+    // ---- Chorus / Ensemble (Tridex II)
+    addB (l, "ch_on",    "Chorus On", false);
+    addB (l, "ch_syn",   "Chorus Synthe", true);
+    addB (l, "ch_br",    "Chorus Brass", false);
+    addB (l, "ch_st",    "Chorus Strings", false);
+    addC (l, "ch_mode",  "Chorus Mode", { "Chorus I", "Chorus II", "Ensemble", "Space" }, 0);
+    addC (l, "ch_space", "Chorus Space", { "1", "2", "3", "4" }, 1);
+    addF (l, "ch_width", "Chorus Width", unit, 0.7f);
+    addF (l, "ch_tone",  "Chorus Tone", unit, 0.6f);
+    addF (l, "ch_rate",  "Chorus Rate", NR (0.05f, 5.0f, 0.0f, 0.4f), 0.6f, "Hz");
+    addF (l, "ch_depth", "Chorus Depth", unit, 0.5f);
+    addF (l, "ch_mix",   "Chorus Mix", unit, 0.5f);
+
     // ---- Plugin extras (not on the hardware panel)
     addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // legacy (unused): per-part splits below
     addF (l, "syn_split",  "Synthe Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
@@ -238,6 +251,8 @@ void TridexProcessor::syncParams()
     p.mgSpeed = get ("mg_speed"); p.mgIntensity = get ("mg_int");
     p.delayVib = on ("dvib_on"); p.delayVibInt = get ("dvib_int");
     p.flSynth = on ("fl_syn"); p.flBrass = on ("fl_br"); p.flStrings = on ("fl_st");
+    p.chOn = on ("ch_on"); p.chSynth = on ("ch_syn"); p.chBrass = on ("ch_br"); p.chStrings = on ("ch_st");
+    p.chMode = idx ("ch_mode"); p.chSpace = idx ("ch_space"); p.chWidth = get ("ch_width"); p.chTone = get ("ch_tone"); p.chRate = get ("ch_rate"); p.chDepth = get ("ch_depth"); p.chMix = get ("ch_mix");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
     p.splitPoint = idx ("split");
     p.splits = { juce::roundToInt (get ("syn_split")), juce::roundToInt (get ("br_split")), juce::roundToInt (get ("st_split")) }; p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));

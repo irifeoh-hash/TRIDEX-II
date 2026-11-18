@@ -30,7 +30,8 @@ constexpr int kRow1 = 98, kRow2 = 170;   // knob centre rows
 constexpr int kModY = 210;               // module names
 constexpr int kSwY = 226;                // switch strip top
 constexpr int kBarY = 288;               // section name bars (bottom of the switch tier)
-constexpr int kLowerY = 312;             // joystick / keyboard area
+constexpr int kTier = 270;               // second row of sections sits this far below the first
+constexpr int kLowerY = 312 + kTier;     // joystick / keyboard area
 constexpr int kRail = 10;                // wooden rail under the keys
 constexpr int kKeysX = 312;              // keyboard starts here
 } // namespace
@@ -562,6 +563,155 @@ void GateGrid::paint (juce::Graphics& g)
     }
 }
 
+//==============================================================================
+SpaceButtons::SpaceButtons (juce::RangedAudioParameter& p)
+    : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); })
+{
+    attachment.sendInitialUpdate();
+}
+
+void SpaceButtons::paint (juce::Graphics& g)
+{
+    const float w = (float) getWidth() / 4.0f;
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto r = juce::Rectangle<float> ((float) i * w, 0.0f, w, (float) getHeight()).reduced (3.0f, 1.0f);
+        const bool on = i == value;
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.fillRoundedRectangle (r.translated (0.0f, 1.5f).expanded (1.0f), 2.5f);
+        g.setGradientFill (juce::ColourGradient (kCapGrey.brighter (0.05f), 0, r.getY(), kCapGrey.darker (on ? 0.3f : 0.15f), 0, r.getBottom(), false));
+        g.fillRoundedRectangle (r, 2.0f);
+        const auto ledC = juce::Point<float> (r.getCentreX(), r.getY() + 6.5f);
+        if (on)
+        {
+            g.setGradientFill (juce::ColourGradient (kLedOn.withAlpha (0.55f), ledC.x, ledC.y, kLedOn.withAlpha (0.0f), ledC.x + 8.0f, ledC.y, true));
+            g.fillEllipse (juce::Rectangle<float> (16, 16).withCentre (ledC));
+        }
+        g.setColour (on ? kLedOn : kLedOff);
+        g.fillEllipse (juce::Rectangle<float> (5, 5).withCentre (ledC));
+        g.setColour (juce::Colour (0xff202020));
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText (juce::String (i + 1), r.withTrimmedTop (12.0f), juce::Justification::centred);
+    }
+}
+
+void SpaceButtons::mouseDown (const juce::MouseEvent& e)
+{
+    const int i = juce::jlimit (0, 3, (int) (e.position.x / ((float) getWidth() / 4.0f)));
+    attachment.setValueAsCompleteGesture ((float) i);
+}
+
+ChorusPage::ChorusPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
+{
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;
+    setSize (W, H);
+    card = { 18, 40, W - 36, 230 };
+    const int y = card.getY() + 70;
+
+    led ("ch_on", { card.getX() + 26, y, 34, 42 });
+    labels.back().second = "CHORUS ON";
+
+    auto mode = std::make_unique<juce::ComboBox>();
+    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ch_mode"))) mode->addItemList (c->choices, 1);
+    mode->setBounds (card.getX() + 90, y + 8, 120, 26);
+    addAndMakeVisible (*mode);
+    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, "ch_mode", *mode));
+    labels.push_back ({ mode.get(), "MODE" });
+    comps.push_back (std::move (mode));
+
+    auto sp = std::make_unique<SpaceButtons> (*apvts.getParameter ("ch_space"));
+    sp->setBounds (card.getX() + 232, y, 150, 42);
+    sp->setTooltip ("SPACE 1-4: depth of the dimension-style mode (SPACE)");
+    addAndMakeVisible (*sp);
+    labels.push_back ({ sp.get(), "SPACE (MODE: SPACE)" });
+    comps.push_back (std::move (sp));
+
+    const char* kIds[] = { "ch_rate", "ch_depth", "ch_width", "ch_tone", "ch_mix" };
+    const char* kNames[] = { "RATE", "DEPTH", "WIDTH", "TONE", "MIX" };
+    for (int i = 0; i < 5; ++i)
+    {
+        auto& k = knob (kIds[i], { card.getX() + 410 + i * 82, y - 14, 70, 70 });
+        labels.back() = { &k, kNames[i] };
+    }
+
+    const char* pIds[] = { "ch_syn", "ch_br", "ch_st" };
+    const char* pNames[] = { "SYNTHE", "BRASS", "STRINGS" };
+    for (int i = 0; i < 3; ++i)
+    {
+        led (pIds[i], { card.getX() + 840 + i * 52, y, 34, 42 });
+        labels.back().second = pNames[i];
+    }
+}
+
+juce::Slider& ChorusPage::knob (const juce::String& id, juce::Rectangle<int> r)
+{
+    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("scale", "uni");
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, this);
+    s->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
+    addAndMakeVisible (*s);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    labels.push_back ({ s.get(), {} });
+    auto& ref = *s;
+    comps.push_back (std::move (s));
+    return ref;
+}
+
+LedButton& ChorusPage::led (const juce::String& id, juce::Rectangle<int> r)
+{
+    auto b = std::make_unique<LedButton> (id);
+    b->setClickingTogglesState (true);
+    b->cap = id == "ch_on" ? kCapGreen : kCapGrey;
+    b->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
+    addAndMakeVisible (*b);
+    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
+    labels.push_back ({ b.get(), {} });
+    auto& ref = *b;
+    comps.push_back (std::move (b));
+    return ref;
+}
+
+void ChorusPage::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText ("CHORUS / ENSEMBLE", 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText ("PICK THE PARTS IT APPLIES TO, LIKE THE FLANGER  /  RUNS BEFORE THE FLANGER  /  PRESS CHORUS AGAIN TO CLOSE",
+                190, 8, 760, 18, juce::Justification::centredLeft);
+
+    const auto r = card.toFloat();
+    g.setColour (kPanel2);
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (kInk.withAlpha (0.2f));
+    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    g.setColour (kInk.withAlpha (0.12f));
+    for (const int x : { 220, 396, 820 })
+        g.drawVerticalLine (card.getX() + x, r.getY() + 20, r.getBottom() - 20);
+
+    g.setColour (kInk.withAlpha (0.85f));
+    g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+    for (const auto& [c, text] : labels)
+    {
+        if (text.isEmpty()) continue;
+        const auto cb = c->getBounds().toFloat();
+        g.drawText (text, juce::Rectangle<float> (cb.getX() - 20, cb.getBottom() + 6, cb.getWidth() + 40, 12), juce::Justification::centred);
+    }
+    g.setColour (kInk.withAlpha (0.6f));
+    g.setFont (juce::FontOptions (9.0f));
+    g.drawFittedText ("CHORUS I: gentle stereo chorus.   CHORUS II: faster and deeper.   ENSEMBLE: lush three-phase string ensemble.\n"
+                      "SPACE: dimension-style widening, very smooth with almost no pitch wobble; SPACE 1-4 set its depth.   "
+                      "WIDTH: stereo spread.   TONE: darker (analog delay) to clearer.",
+                      card.withY (card.getBottom() + 14).withHeight (34), juce::Justification::centredLeft, 3);
+}
+
 ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (int)> gateStep)
     : apvts (state), gateStepFn (std::move (gateStep))
 {
@@ -569,32 +719,32 @@ ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (
     setSize (W, H);
     const char* ids[] = { "arp1", "arp2", "arp3" };
     const char* names[] = { "SYNTHE", "BRASS", "STRINGS" };
-    const int pad = 18, gap = 16, cardW = (W - 2 * pad - 2 * gap) / 3, cardY = 34, cardH = H - cardY - 10;
+    const int pad = 18, gap = 12, cardY = 36, cardH = (H - cardY - 12 - 2 * gap) / 3, cardW = W - 2 * pad;
 
     for (int i = 0; i < 3; ++i)
     {
         auto& c = cards[(size_t) i];
         const juce::String id (ids[i]), sg ("sg" + juce::String (i + 1));
         c.name = names[i];
-        c.area = { pad + i * (cardW + gap), cardY, cardW, cardH };
-        const int x = c.area.getX(), y = c.area.getY();
+        c.area = { pad, cardY + i * (cardH + gap), cardW, cardH };
+        const int x = c.area.getX() + 70, y = c.area.getY() + (cardH - 110) / 2;   // title sits at the left
 
-        // Arpeggiator row
-        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 18, y + 36, 34, 42 }));
-        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 74,  y + 46, 110, 26 }));
-        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 196, y + 46, 86, 26 }));
-        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 294, y + 46, 56, 26 }));
-        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 362, y + 26, 64, 64 }));
-        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 444, y + 36, 34, 42 }));
+        // Arpeggiator block
+        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 0,   y + 30, 34, 42 }));
+        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 50,  y + 40, 104, 26 }));
+        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 164, y + 40, 78, 26 }));
+        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 252, y + 40, 52, 26 }));
+        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 310, y + 20, 64, 64 }));
+        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 384, y + 30, 34, 42 }));
 
-        // Step gate row
-        const int gy = y + 122;
-        c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { x + 18, gy, 34, 42 }));
+        // Step gate block, to the right
+        const int gx = x + 448;
+        c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { gx, y + 30, 34, 42 }));
         c.grid   = std::make_unique<GateGrid> (apvts, sg);
-        c.grid->setBounds (x + 66, gy + 2, 290, 44);
+        c.grid->setBounds (gx + 46, y + 32, 270, 44);
         addAndMakeVisible (*c.grid);
-        c.sgRate = std::unique_ptr<juce::ComboBox> (&makeCombo (sg + "_rate", { x + 368, gy + 10, 70, 26 }));
-        c.sgSync = std::unique_ptr<LedButton> (&makeLed (sg + "_sync", { x + 450, gy, 34, 42 }));
+        c.sgRate = std::unique_ptr<juce::ComboBox> (&makeCombo (sg + "_rate", { gx + 326, y + 40, 70, 26 }));
+        c.sgSync = std::unique_ptr<LedButton> (&makeLed (sg + "_sync", { gx + 404, y + 30, 34, 42 }));
     }
     tempo = std::unique_ptr<juce::Slider> (&makeKnob ("arp_tempo", { W - 52, 2, 30, 30 }));
     startTimerHz (30);
@@ -675,9 +825,9 @@ void ArpPage::paint (juce::Graphics& g)
 
         g.setColour (kInk);
         g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-        g.drawText (c.name, r.withHeight (30).reduced (14, 0), juce::Justification::centredLeft);
+        g.drawText (c.name, juce::Rectangle<float> (r.getX() + 12, r.getY(), 60, r.getHeight()), juce::Justification::centredLeft);
         g.setColour (kInk.withAlpha (0.15f));
-        g.drawHorizontalLine ((int) r.getY() + 30, r.getX() + 10, r.getRight() - 10);
+        g.drawVerticalLine ((int) r.getX() + 64, r.getY() + 10, r.getBottom() - 10);
 
         g.setColour (kInk.withAlpha (0.85f));
         g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
@@ -691,9 +841,9 @@ void ArpPage::paint (juce::Graphics& g)
         g.drawText ("NOTE LEN", juce::Rectangle<float> (gb.getX() - 6, gb.getBottom() - 2, gb.getWidth() + 12, 12), juce::Justification::centred);
         lbl (*c.sgOn, "STEP GATE"); lbl (*c.sgRate, "RATE"); lbl (*c.sgSync, "SYNC");
 
-        // divider between the arp row and the step gate row
+        // divider between the arp block and the step gate block
         g.setColour (kInk.withAlpha (0.12f));
-        g.drawHorizontalLine (c.sgOn->getY() - 12, r.getX() + 10, r.getRight() - 10);
+        g.drawVerticalLine (c.sgOn->getX() - 14, r.getY() + 10, r.getBottom() - 10);
         g.setColour (kInk.withAlpha (0.85f));
     }
 
@@ -944,93 +1094,96 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         sectionBar ((float) a, (float) b, kBarY, "SYNTHESIZER");
     }
 
+    // ---- Second row of sections (Brass, Strings, Output), stacked under the first
+    x = 34;
+
     // ---------------- BRASS
     {
         const int s0 = x;
         // OSC 1 (footage on the 16'/8' buttons below) and OSC 2
-        switchKnob ("br_wave", col (0), kRow1, "OSC 1 WAVE", false);
-        switchKnob ("br2_oct", col (0), kRow2, "OSC 2 OCTAVE", false);
-        switchKnob ("br2_wave", col (1), kRow1, "OSC 2 WAVE", false);
-        knob ("br2_detune", col (1), kRow2, "DETUNE", false);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "OSCILLATORS");
+        switchKnob ("br_wave", col (0), (kRow1 + kTier), "OSC 1 WAVE", false);
+        switchKnob ("br2_oct", col (0), (kRow2 + kTier), "OSC 2 OCTAVE", false);
+        switchKnob ("br2_wave", col (1), (kRow1 + kTier), "OSC 2 WAVE", false);
+        knob ("br2_detune", col (1), (kRow2 + kTier), "DETUNE", false);
+        moduleLabel ((float) s0, (float) s0 + 2 * kCol, (kModY + kTier), "OSCILLATORS");
 
-        knob ("br_cutoff", col (2), kRow1, "CUTOFF FREQ", false);
-        knob ("br_res", col (3), kRow1, "RESONANCE", false);
-        knob ("br_a", col (4), kRow1, "ATTACK", false);
-        knob ("br_d", col (5), kRow1, "DECAY", false);
-        switchKnob ("br_silence", col (2), kRow2, "SILENCE NOTE", false);
-        knob ("br_egint", col (3), kRow2, "EG INTENSITY", false);
-        knob ("br_s", col (4), kRow2, "SUSTAIN", false);
-        knob ("br_r", col (5), kRow2, "RELEASE", false);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCF");
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "EG");
+        knob ("br_cutoff", col (2), (kRow1 + kTier), "CUTOFF FREQ", false);
+        knob ("br_res", col (3), (kRow1 + kTier), "RESONANCE", false);
+        knob ("br_a", col (4), (kRow1 + kTier), "ATTACK", false);
+        knob ("br_d", col (5), (kRow1 + kTier), "DECAY", false);
+        switchKnob ("br_silence", col (2), (kRow2 + kTier), "SILENCE NOTE", false);
+        knob ("br_egint", col (3), (kRow2 + kTier), "EG INTENSITY", false);
+        knob ("br_s", col (4), (kRow2 + kTier), "SUSTAIN", false);
+        knob ("br_r", col (5), (kRow2 + kTier), "RELEASE", false);
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, (kModY + kTier), "VCF");
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, (kModY + kTier), "EG");
 
-        knob ("br_vol", s0 + 20, kSwY + 18, "VOLUME", false, 30);
+        knob ("br_vol", s0 + 20, (kSwY + kTier) + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
-        led ("br_on", bx, kSwY, "OUTPUT");
-        led ("br_16", bx += 40, kSwY, "OSC 1 16'");
-        led ("br_8", bx += 38, kSwY, "OSC 1 8'");
-        led ("br_multi", bx += 46, kSwY, "MULTIPLE TRIGGER");
-        led ("br_tsel", bx += 42, kSwY, "TRIGGER SELECT");
-        octave ("br_octsh", bx += 46, kSwY);
+        led ("br_on", bx, (kSwY + kTier), "OUTPUT");
+        led ("br_16", bx += 40, (kSwY + kTier), "OSC 1 16'");
+        led ("br_8", bx += 38, (kSwY + kTier), "OSC 1 8'");
+        led ("br_multi", bx += 46, (kSwY + kTier), "MULTIPLE TRIGGER");
+        led ("br_tsel", bx += 42, (kSwY + kTier), "TRIGGER SELECT");
+        octave ("br_octsh", bx += 46, (kSwY + kTier));
         // Tridex II: per-note brass filter switch
-        led ("br_polyvcf", col (6), kRow1 - 22, "POLY VCF");
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, kModY, "VCF MODE");
+        led ("br_polyvcf", col (6), (kRow1 + kTier) - 22, "POLY VCF");
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 7 * kCol, (kModY + kTier), "VCF MODE");
         // Tridex II: glide (portamento / glissando)
-        knob ("br_glide", col (7), kRow1, "GLIDE TIME", false);
-        modeSwitch ("br_gliss", col (7), kRow2, false);
+        knob ("br_glide", col (7), (kRow1 + kTier), "GLIDE TIME", false);
+        modeSwitch ("br_gliss", col (7), (kRow2 + kTier), false);
         // Tridex II: MONO column (MONO on/off + RETRIG / LEGATO)
-        led ("br_mono", col (8), kRow1 - 22, "MONO");
-        modeSwitch ("br_legato", col (8), kRow2, false, "RETRIG", "LEGATO");
-        moduleLabel ((float) s0 + 8 * kCol, (float) s0 + 9 * kCol, kModY, "MONO");
-        moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, kModY, "GLIDE");
+        led ("br_mono", col (8), (kRow1 + kTier) - 22, "MONO");
+        modeSwitch ("br_legato", col (8), (kRow2 + kTier), false, "RETRIG", "LEGATO");
+        moduleLabel ((float) s0 + 8 * kCol, (float) s0 + 9 * kCol, (kModY + kTier), "MONO");
+        moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, (kModY + kTier), "GLIDE");
         auto [a, b] = sectionEnd (9);
-        sectionBar ((float) a, (float) b, kBarY, "BRASS");
+        sectionBar ((float) a, (float) b, (kBarY + kTier), "BRASS");
     }
 
     // ---------------- STRINGS
     {
         const int s0 = x;
-        knob ("st_attack", col (0), kRow1, "ATTACK", false);
-        knob ("st_release", col (0), kRow2, "RELEASE", false);
-        knob ("st_eq_hi", col (1), kRow1, "HIGH", false);
-        knob ("st_eq_lo", col (1), kRow2, "LOW", false);
-        knob ("bow_level", col (2), kRow1, "LEVEL", false);
-        knob ("bow_tone", col (2), kRow2, "TONE", false);
-        knob ("svib_delay", col (3), kRow1, "DELAY TIME", false);
-        knob ("svib_int", col (3), kRow2, "INTENSITY", false);
-        knob ("svib_speed", col (4), kRow1, "SPEED", false);
-        knob ("st_balance", col (4), kRow2, "KBD BALANCE", false);
-        moduleLabel ((float) s0, (float) s0 + kCol, kModY, "ENVELOPE");
-        moduleLabel ((float) s0 + kCol, (float) s0 + 2 * kCol, kModY, "EQUALIZER");
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 3 * kCol, kModY, "BOWING");
-        moduleLabel ((float) s0 + 3 * kCol, (float) s0 + 4 * kCol, kModY, "VIBRATO");
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 5 * kCol, kModY, "FILTER");
+        knob ("st_attack", col (0), (kRow1 + kTier), "ATTACK", false);
+        knob ("st_release", col (0), (kRow2 + kTier), "RELEASE", false);
+        knob ("st_eq_hi", col (1), (kRow1 + kTier), "HIGH", false);
+        knob ("st_eq_lo", col (1), (kRow2 + kTier), "LOW", false);
+        knob ("bow_level", col (2), (kRow1 + kTier), "LEVEL", false);
+        knob ("bow_tone", col (2), (kRow2 + kTier), "TONE", false);
+        knob ("svib_delay", col (3), (kRow1 + kTier), "DELAY TIME", false);
+        knob ("svib_int", col (3), (kRow2 + kTier), "INTENSITY", false);
+        knob ("svib_speed", col (4), (kRow1 + kTier), "SPEED", false);
+        knob ("st_balance", col (4), (kRow2 + kTier), "KBD BALANCE", false);
+        moduleLabel ((float) s0, (float) s0 + kCol, (kModY + kTier), "ENVELOPE");
+        moduleLabel ((float) s0 + kCol, (float) s0 + 2 * kCol, (kModY + kTier), "EQUALIZER");
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 3 * kCol, (kModY + kTier), "BOWING");
+        moduleLabel ((float) s0 + 3 * kCol, (float) s0 + 4 * kCol, (kModY + kTier), "VIBRATO");
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 5 * kCol, (kModY + kTier), "FILTER");
         // Tridex II: strings VCF
-        knob ("st_cutoff", col (5), kRow1, "CUTOFF FREQ", false);
-        knob ("st_res", col (5), kRow2, "RESONANCE", false);
-        moduleLabel ((float) s0 + 5 * kCol, (float) s0 + 6 * kCol, kModY, "VCF");
+        knob ("st_cutoff", col (5), (kRow1 + kTier), "CUTOFF FREQ", false);
+        knob ("st_res", col (5), (kRow2 + kTier), "RESONANCE", false);
+        moduleLabel ((float) s0 + 5 * kCol, (float) s0 + 6 * kCol, (kModY + kTier), "VCF");
 
-        knob ("st_vol", s0 + 20, kSwY + 18, "VOLUME", false, 30);
+        knob ("st_vol", s0 + 20, (kSwY + kTier) + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
-        led ("st_on", bx, kSwY, "OUTPUT");
-        led ("st_16", bx += 38, kSwY, "16'");
-        led ("st_8", bx += 34, kSwY, "8'");
-        led ("st_4", bx += 34, kSwY, "4'");
-        led ("bow_on", bx += 40, kSwY, "BOWING");
-        led ("svib_off", bx += 40, kSwY, "VIBRATO OFF");
-        led ("ens_off", bx += 40, kSwY, "ENSEMBLE OFF");
-        octave ("st_octsh", bx += 44, kSwY);
+        led ("st_on", bx, (kSwY + kTier), "OUTPUT");
+        led ("st_16", bx += 38, (kSwY + kTier), "16'");
+        led ("st_8", bx += 34, (kSwY + kTier), "8'");
+        led ("st_4", bx += 34, (kSwY + kTier), "4'");
+        led ("bow_on", bx += 40, (kSwY + kTier), "BOWING");
+        led ("svib_off", bx += 40, (kSwY + kTier), "VIBRATO OFF");
+        led ("ens_off", bx += 40, (kSwY + kTier), "ENSEMBLE OFF");
+        octave ("st_octsh", bx += 44, (kSwY + kTier));
         auto [a, b] = sectionEnd (6);
-        sectionBar ((float) a, (float) b, kBarY, "STRINGS");
+        sectionBar ((float) a, (float) b, (kBarY + kTier), "STRINGS");
     }
 
     // ---------------- OUTPUT
     {
-        knob ("master", col (0), kRow2, "TOTAL VOLUME", false);
-        text ({ (float) x, (float) kRow1 - 30, (float) kCol, 11 }, "POWER ON", 8.0f, true);
+        knob ("master", col (0), (kRow2 + kTier), "TOTAL VOLUME", false);
+        text ({ (float) x, (float) (kRow1 + kTier) - 30, (float) kCol, 11 }, "POWER ON", 8.0f, true);
         auto [a, b] = sectionEnd (1);
-        sectionBar ((float) a, (float) b, kBarY, "VOLUME");
+        sectionBar ((float) a, (float) b, (kBarY + kTier), "VOLUME");
     }
 
     // ---------------- Lower left: DELAY VIBRATO + JOYSTICK
@@ -1061,7 +1214,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     // ---------------- Plugin setup strip (not on the hardware)
     {
         const int y = 22;
-        int sx = kW - 430;
+        int sx = kW - 344;
         const auto mini = [&] (const char* id, const char* name, const char* tip)
         {
             knob (id, sx, y, "", false, 18).setTooltip (tip);
@@ -1078,13 +1231,13 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
 
         // Tridex II: note priority for Synth / Brass MONO
         prioBox.addItemList ({ "Priority: Last", "Priority: First", "Priority: Low", "Priority: High" }, 1);
-        prioBox.setBounds (kW - 590, 10, 128, 22);
+        prioBox.setBounds (kW - 468, 10, 106, 22);
         prioBox.setTooltip ("Note priority for Synth and Brass MONO");
         addAndMakeVisible (prioBox);
         prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
     }
 
-    lcd = { 330, 9, 320, 24 };
+    lcd = { 276, 9, 160, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
@@ -1097,12 +1250,31 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->onClick = [this]
         {
             arpPage->setVisible (! arpPage->isVisible());
-            if (arpPage->isVisible()) arpPage->toFront (false);
+            if (arpPage->isVisible()) { chorusPage->setVisible (false); arpPage->toFront (false); }
         };
         addAndMakeVisible (*b);
         arpBtn = b.get();
         owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 48, 13, 60, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 48, 13, 40, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
+    }
+
+    // ---------------- CHORUS page toggle (Tridex II)
+    chorusPage = std::make_unique<tdxui::ChorusPage> (proc.apvts);
+    chorusPage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*chorusPage);
+    {
+        auto b = std::make_unique<tdxui::LedButton> ("CHORUS");
+        b->setBounds (lcd.getRight() + 94, 4, 30, 32);
+        b->setTooltip ("Show / hide the chorus page");
+        b->onClick = [this]
+        {
+            chorusPage->setVisible (! chorusPage->isVisible());
+            if (chorusPage->isVisible()) { arpPage->setVisible (false); chorusPage->toFront (false); }
+        };
+        addAndMakeVisible (*b);
+        chorusBtn = b.get();
+        owned.push_back (std::move (b));
+        text ({ (float) lcd.getRight() + 128, 13, 64, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
     }
 
     // ---------------- Keyboard (61 keys, C-C)
@@ -1169,6 +1341,7 @@ void TridexPanel::timerCallback()
     writeBtn->repaint(); manualBtn->repaint();
     if (splitOverlay) splitOverlay->refreshIfChanged();
     if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
+    if (chorusBtn->lit != chorusPage->isVisible()) { chorusBtn->lit = chorusPage->isVisible(); chorusBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
 
@@ -1204,23 +1377,24 @@ void TridexPanel::paint (juce::Graphics& g)
     g.setGradientFill (juce::ColourGradient (kPanel.brighter (0.05f), 0, 38, kPanel.darker (0.12f), 0, (float) kLowerY, false));
     g.fillRect (24, 38, kW - 48, kLowerY - 38);
 
-    // Switch tier: a second panel strip under the knobs, as on the hardware
-    g.setColour (kPanel2);
-    g.fillRect (24, kSwY - 12, kW - 48, kBarY + 18 - (kSwY - 12));
-    g.setColour (juce::Colours::black.withAlpha (0.5f));
-    g.fillRect (24, kSwY - 13, kW - 48, 1);
-    g.setColour (kInk.withAlpha (0.10f));
-    g.fillRect (24, kSwY - 12, kW - 48, 1);
-
-    // Section header bars across the top (light grey, dark lettering) + dividers
+    for (const int ty : { 0, kTier })
     {
+        // Switch tier: a second panel strip under the knobs, as on the hardware
+        g.setColour (kPanel2);
+        g.fillRect (24, kSwY + ty - 12, kW - 48, kBarY + 18 - (kSwY - 12));
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.fillRect (24, kSwY + ty - 13, kW - 48, 1);
+        g.setColour (kInk.withAlpha (0.10f));
+        g.fillRect (24, kSwY + ty - 12, kW - 48, 1);
+
+        // Section header bars across the top of each row (light grey, dark lettering) + dividers
         const auto headFont = juce::Font (juce::FontOptions (10.0f, juce::Font::bold).withKerningFactor (0.10f));
         std::vector<float> ends;
         for (const auto& bar : bars)
         {
-            if (! juce::approximatelyEqual (bar.y, (float) kBarY)) continue;
+            if (! juce::approximatelyEqual (bar.y, (float) (kBarY + ty))) continue;
             ends.push_back (bar.x2);
-            const auto r = juce::Rectangle<float> (bar.x1 - 2.0f, (float) kHeadY, bar.x2 - bar.x1 + 4.0f, 15.0f);
+            const auto r = juce::Rectangle<float> (bar.x1 - 2.0f, (float) (kHeadY + ty), bar.x2 - bar.x1 + 4.0f, 15.0f);
             g.setGradientFill (juce::ColourGradient (kHeader.brighter (0.06f), 0, r.getY(), kHeader.darker (0.08f), 0, r.getBottom(), false));
             g.fillRect (r);
             g.setColour (kHeaderInk);
@@ -1230,8 +1404,11 @@ void TridexPanel::paint (juce::Graphics& g)
         std::sort (ends.begin(), ends.end());
         g.setColour (juce::Colours::black.withAlpha (0.35f));
         for (size_t i = 0; i + 1 < ends.size(); ++i)
-            g.fillRect (ends[i] + 5.5f, (float) kHeadY, 1.0f, (float) (kBarY + 16 - kHeadY));
+            g.fillRect (ends[i] + 5.5f, (float) (kHeadY + ty), 1.0f, (float) (kBarY + 16 - kHeadY));
     }
+    // Seam between the two rows
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillRect (24, kBarY + 22, kW - 48, 2);
 
     // Lower area: joystick panel and the keybed, wooden rail under the keys
     g.setColour (kPanel2.darker (0.15f));

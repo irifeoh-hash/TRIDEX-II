@@ -387,4 +387,91 @@ private:
     OnePoleLP lp[2];
 };
 
+//==============================================================================
+// Stereo chorus / ensemble (Tridex II). Modes:
+//   0 CHORUS I  - two BBD-style taps, triangle LFO in anti-phase (gentle, wide)
+//   1 CHORUS II - same circuit, faster and deeper
+//   2 ENSEMBLE  - three taps per side, 120 degrees apart, slow + fast LFO (lush)
+//   3 SPACE     - dimension-style: one slow LFO sweeps two delays in opposite directions on a
+//                 mono sum, cross-mixed into both sides; wide, smooth, nearly no pitch wobble.
+//                 SPACE 1..4 select increasing depth / rate.
+// WIDTH sets the stereo spread, TONE the darkness of the delayed signal (BBD-style low-pass).
+struct StereoChorus
+{
+    void prepare (float sampleRate)
+    {
+        sr = sampleRate;
+        dl[0].prepare (0.05f, sr); dl[1].prepare (0.05f, sr);
+        lastTone = -1.0f;
+        phase = slow = fast = 0.0f;
+    }
+
+    void process (float& L, float& R, int mode, float rateHz, float depth, float mix,
+                  int space, float width, float tone)
+    {
+        if (tone != lastTone)
+        {
+            lastTone = tone;
+            const float hz = 2500.0f * std::exp2 (tone * 2.4f);   // ~2.5 kHz (dark) .. ~13 kHz (clear)
+            for (auto& f : lp) f.set (hz, sr);
+        }
+        float wl, wr;
+        if (mode == 3)
+        {
+            // Dimension-style
+            static constexpr float kSpaceRate[]  = { 0.25f, 0.25f, 0.30f, 0.50f };
+            static constexpr float kSpaceDepth[] = { 0.55f, 0.95f, 1.40f, 2.00f };   // ms
+            const int sp = std::clamp (space, 0, 3);
+            phase += kSpaceRate[sp] * (rateHz / 0.6f) / sr; if (phase >= 1.0f) phase -= 1.0f;
+            const float tri = phase < 0.5f ? 4.0f * phase - 1.0f : 3.0f - 4.0f * phase;
+            const float m = 0.5f * (L + R);
+            dl[0].push (m); dl[1].push (m);
+            const float d = kSpaceDepth[sp] * (0.4f + 1.2f * depth);
+            const float a = lp[0].process (dl[0].read ((3.5f + d * tri) * 0.001f * sr));
+            const float b = lp[1].process (dl[1].read ((3.5f - d * tri) * 0.001f * sr));
+            const float x = 0.8f * width;                          // cross-feed (inverted) = spatial spread
+            wl = a - x * b;
+            wr = b - x * a;
+        }
+        else
+        {
+            dl[0].push (L); dl[1].push (R);
+            if (mode == 2)
+            {
+                slow += rateHz * 0.6f / sr; if (slow >= 1.0f) slow -= 1.0f;
+                fast += (5.5f + rateHz) / sr; if (fast >= 1.0f) fast -= 1.0f;
+                const auto tap = [&] (int ch, float off)
+                {
+                    const float mm = 3.0f * std::sin (kTwoPi * (slow + off)) + 0.45f * std::sin (kTwoPi * (fast + off));
+                    return dl[ch].read ((7.0f + depth * mm) * 0.001f * sr);
+                };
+                wl = (tap (0, 0.0f) + tap (0, 1.0f / 3.0f) + tap (0, 2.0f / 3.0f)) * 0.45f;
+                wr = (tap (1, 1.0f / 6.0f) + tap (1, 0.5f) + tap (1, 5.0f / 6.0f)) * 0.45f;
+            }
+            else
+            {
+                const float r = mode == 1 ? rateHz * 1.6f : rateHz;
+                const float d = (mode == 1 ? 2.8f : 1.8f) * depth;
+                phase += r / sr; if (phase >= 1.0f) phase -= 1.0f;
+                const float tri = phase < 0.5f ? 4.0f * phase - 1.0f : 3.0f - 4.0f * phase;
+                wl = dl[0].read ((5.0f + d * tri) * 0.001f * sr);
+                wr = dl[1].read ((5.0f - d * tri) * 0.001f * sr);
+            }
+            wl = lp[0].process (wl); wr = lp[1].process (wr);
+            // WIDTH: blend the two wet sides towards mono (0) or keep them apart (1)
+            const float w = 0.5f + 0.5f * width, o = 1.0f - w;
+            const float nl = wl * w + wr * o, nr = wr * w + wl * o;
+            wl = nl; wr = nr;
+        }
+        const float dry = 1.0f - 0.5f * mix, wet = 0.75f * mix;
+        L = L * dry + wl * wet;
+        R = R * dry + wr * wet;
+    }
+
+private:
+    float sr = 44100.0f, phase = 0.0f, slow = 0.0f, fast = 0.0f, lastTone = -1.0f;
+    DelayLine dl[2];
+    OnePoleLP lp[2];
+};
+
 } // namespace tdx

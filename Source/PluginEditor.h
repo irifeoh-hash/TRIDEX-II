@@ -141,6 +141,38 @@ private:
     std::atomic<float>& jy;
     juce::Point<float> pos;
 };
+// SPACE 1-4 push buttons (radio) for the chorus page.
+class SpaceButtons : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    SpaceButtons (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+
+private:
+    juce::ParameterAttachment attachment;
+    int value = 1;
+};
+
+// CHORUS page: overlays the control section; opened/closed with the CHORUS button in the top bar.
+class ChorusPage : public juce::Component
+{
+public:
+    explicit ChorusPage (juce::AudioProcessorValueTreeState& state);
+    void paint (juce::Graphics&) override;
+
+private:
+    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r);
+    LedButton& led (const juce::String& id, juce::Rectangle<int> r);
+    juce::AudioProcessorValueTreeState& apvts;
+    std::vector<std::unique_ptr<juce::Component>> comps;
+    std::vector<std::pair<juce::Component*, juce::String>> labels;
+    juce::Rectangle<int> card;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+};
+
 // STEP GATE grid: 8 steps x L/R lanes, click to toggle, drag to paint; current step highlighted.
 class GateGrid : public juce::Component
 {
@@ -199,7 +231,7 @@ private:
 class TridexPanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int kW = 2082, kH = 536;
+    static constexpr int kW = 1104, kH = 806;
 
     explicit TridexPanel (TridexProcessor&);
     ~TridexPanel() override;
@@ -239,6 +271,8 @@ private:
     tdxui::LedButton* writeBtn = nullptr;
     tdxui::LedButton* manualBtn = nullptr;
     tdxui::LedButton* arpBtn = nullptr;
+    tdxui::LedButton* chorusBtn = nullptr;
+    std::unique_ptr<tdxui::ChorusPage> chorusPage;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;
     std::array<tdxui::LedButton*, 4> bankBtns {};
