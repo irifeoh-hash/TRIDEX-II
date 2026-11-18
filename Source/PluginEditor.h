@@ -45,6 +45,7 @@ public:
     SplitSelector (juce::RangedAudioParameter& p);
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    juce::Colour colour { 0xffff3a2a };   // part colour (green / red / orange)
 
 private:
     juce::RangedAudioParameter& param;
@@ -88,6 +89,7 @@ class SplitPointControl : public juce::Component, public juce::SettableTooltipCl
 public:
     SplitPointControl (juce::RangedAudioParameter& p);
     void paint (juce::Graphics&) override;
+    juce::Colour colour { 0xffff3a2a };   // part colour
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
@@ -99,6 +101,20 @@ private:
     juce::ParameterAttachment attachment;
     int note = 60, dragStartNote = 60;
     bool dragging = false;
+};
+
+// Draws each part's keyboard range (coloured bars) and split point (coloured line) over the keys.
+class SplitOverlay : public juce::Component
+{
+public:
+    SplitOverlay (juce::AudioProcessorValueTreeState& state, juce::MidiKeyboardComponent& keys);
+    void paint (juce::Graphics&) override;
+    void refreshIfChanged();
+
+private:
+    juce::AudioProcessorValueTreeState& apvts;
+    juce::MidiKeyboardComponent& kb;
+    std::array<float, 9> last {};
 };
 
 // Spring-loaded joystick: X = pitch bend, Y+ = vibrato, Y- = trill.
@@ -214,6 +230,7 @@ private:
     tdxui::LedButton* manualBtn = nullptr;
     tdxui::LedButton* arpBtn = nullptr;
     std::unique_ptr<tdxui::ArpPage> arpPage;
+    std::unique_ptr<tdxui::SplitOverlay> splitOverlay;
     std::array<tdxui::LedButton*, 4> bankBtns {};
     std::array<tdxui::LedButton*, 8> progBtns {};
     bool writeArmed = false;

@@ -19,6 +19,8 @@ const juce::Colour kCapGreen  { 0xffa9c23c };
 const juce::Colour kCapOrange { 0xffeb8a34 };
 const juce::Colour kCapRed    { 0xffcf3426 };
 const juce::Colour kCapTan    { 0xff6e4a30 };
+// Part colours for the split indicators: SYNTHE green, BRASS red, STRINGS orange.
+const juce::Colour kPartCol[3] = { juce::Colour (0xff5bd34f), juce::Colour (0xffff3b2c), juce::Colour (0xffff9a2e) };
 const juce::Colour kLedOn  { 0xffff3a2a };
 const juce::Colour kLedOff { 0xff4a1612 };
 
@@ -170,7 +172,7 @@ void SplitSelector::paint (juce::Graphics& g)
         juce::Path tri;
         if (left) tri.addTriangle (r.getRight(), r.getY(), r.getRight(), r.getBottom(), r.getX(), r.getCentreY());
         else      tri.addTriangle (r.getX(), r.getY(), r.getX(), r.getBottom(), r.getRight(), r.getCentreY());
-        g.setColour (on ? kLedOn : kLedOff);
+        g.setColour (on ? colour : colour.withAlpha (0.18f));
         g.fillPath (tri);
     };
     arrow ({ b.getX() + 4, b.getCentreY() - 5, 10, 10 }, true, l);
@@ -298,13 +300,13 @@ void SplitPointControl::paint (juce::Graphics& g)
     const auto b = getLocalBounds().toFloat();
     g.setColour (juce::Colour (0xff1d0705));
     g.fillRoundedRectangle (b, 2.5f);
-    g.setColour (kLedOn.withAlpha (0.6f));
+    g.setColour (colour.withAlpha (0.6f));
     const float cy = b.getCentreY();
     juce::Path l, r;
     l.addTriangle (b.getX() + 3, cy, b.getX() + 7, cy - 3, b.getX() + 7, cy + 3);
     r.addTriangle (b.getRight() - 3, cy, b.getRight() - 7, cy - 3, b.getRight() - 7, cy + 3);
     g.fillPath (l); g.fillPath (r);
-    g.setColour (kLedOn);
+    g.setColour (colour);
     g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::bold));
     g.drawText (juce::MidiMessage::getMidiNoteName (note, true, true, 3), b, juce::Justification::centred);
 }
@@ -315,11 +317,14 @@ void SplitPointControl::setNote (int n)
     if (n != note) attachment.setValueAsPartOfGesture ((float) n);
 }
 
-void SplitPointControl::mouseDown (const juce::MouseEvent&)
+void SplitPointControl::mouseDown (const juce::MouseEvent& e)
 {
     dragStartNote = note;
     dragging = false;
     attachment.beginGesture();
+    // Arrow zones step immediately, so rapid clicks keep stepping.
+    if (e.x < getWidth() / 3) setNote (note - 1);
+    else if (e.x > getWidth() * 2 / 3) setNote (note + 1);
 }
 
 void SplitPointControl::mouseDrag (const juce::MouseEvent& e)
@@ -329,24 +334,79 @@ void SplitPointControl::mouseDrag (const juce::MouseEvent& e)
     setNote (dragStartNote - e.getDistanceFromDragStartY() / 4);
 }
 
-void SplitPointControl::mouseUp (const juce::MouseEvent& e)
+void SplitPointControl::mouseUp (const juce::MouseEvent&)
 {
-    if (! dragging)
-    {
-        if (e.x < getWidth() / 3) setNote (note - 1);
-        else if (e.x > getWidth() * 2 / 3) setNote (note + 1);
-    }
     attachment.endGesture();
 }
 
-void SplitPointControl::mouseDoubleClick (const juce::MouseEvent&)
+void SplitPointControl::mouseDoubleClick (const juce::MouseEvent& e)
 {
-    attachment.setValueAsCompleteGesture (60.0f);
+    // Reset only from the note name (the middle), not the arrows.
+    if (e.x >= getWidth() / 3 && e.x <= getWidth() * 2 / 3) attachment.setValueAsCompleteGesture (60.0f);
 }
 
 void SplitPointControl::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
 {
     attachment.setValueAsCompleteGesture ((float) juce::jlimit (24, 108, note + (w.deltaY > 0 ? 1 : -1)));
+}
+
+//==============================================================================
+SplitOverlay::SplitOverlay (juce::AudioProcessorValueTreeState& state, juce::MidiKeyboardComponent& keys)
+    : apvts (state), kb (keys)
+{
+    setInterceptsMouseClicks (false, false);
+}
+
+void SplitOverlay::refreshIfChanged()
+{
+    const char* ids[] = { "syn_zone", "br_zone", "st_zone", "syn_split", "br_split", "st_split", "syn_on", "br_on", "st_on" };
+    std::array<float, 9> now {};
+    for (size_t i = 0; i < 9; ++i) now[i] = apvts.getRawParameterValue (ids[i])->load();
+    if (now != last) { last = now; repaint(); }
+}
+
+void SplitOverlay::paint (juce::Graphics& g)
+{
+    const int lowKey = kb.getRangeStart(), highKey = kb.getRangeEnd();
+    const auto keyX = [&] (int note)
+    {
+        if (note > highKey) return kb.getKeyStartPosition (highKey) + kb.getKeyWidth();
+        return kb.getKeyStartPosition (juce::jlimit (lowKey, highKey, note));
+    };
+    const float right = keyX (highKey + 1), h = (float) getHeight();
+
+    for (int s = 0; s < 3; ++s)
+    {
+        const int zone = juce::roundToInt (last[(size_t) s]);
+        const int split = juce::roundToInt (last[(size_t) s + 3]);
+        const bool on = last[(size_t) s + 6] > 0.5f;
+        const auto col = kPartCol[s].withAlpha (on ? 1.0f : 0.3f);
+        const float xs = keyX (split);
+
+        // Range bar along the top of the keys
+        const float x0 = zone == 2 ? xs : 0.0f, x1 = zone == 0 ? xs : right;
+        const auto bar = juce::Rectangle<float> (x0 + 1.0f, 1.0f + (float) s * 7.0f, std::max (0.0f, x1 - x0 - 2.0f), 5.5f);
+        g.setColour (juce::Colours::black.withAlpha (on ? 0.55f : 0.2f));
+        g.fillRoundedRectangle (bar.expanded (1.0f), 2.5f);
+        g.setColour (col);
+        g.fillRoundedRectangle (bar, 2.0f);
+
+        // Split line (only meaningful for L or H), offset per part so equal splits stay visible
+        if (zone != 1)
+        {
+            const float x = xs + (float) (s - 1) * 4.0f;
+            g.setColour (juce::Colours::black.withAlpha (on ? 0.5f : 0.2f));
+            g.fillRect (x - 2.5f, 0.0f, 5.0f, h);
+            g.setColour (col);
+            g.fillRect (x - 1.5f, 0.0f, 3.0f, h);
+            juce::Path tri;
+            tri.addTriangle (x - 6.0f, h, x + 6.0f, h, x, h - 9.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.6f));
+            g.strokePath (tri, juce::PathStrokeType (2.0f));
+            g.setColour (col);
+            g.fillPath (tri);
+        }
+    }
 }
 
 //==============================================================================
@@ -753,15 +813,17 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         {
             const int y = kRow1 - 30 + i * 46;
             auto sel = std::make_unique<tdxui::SplitSelector> (*proc.apvts.getParameter (ids[i]));
+            sel->colour = kPartCol[i];
             sel->setBounds (col (1) - 22, y, 44, 22);
             sel->setTooltip (juce::String (names[i]) + " split: lower 2 / upper 3 octaves");
             addAndMakeVisible (*sel);
             owned.push_back (std::move (sel));
-            text ({ (float) col (1) - 28, (float) y + 22, 56, 10 }, names[i], 8.0f);
+            text ({ (float) col (1) - 28, (float) y + 22, 56, 10 }, names[i], 8.0f, true, juce::Justification::centred, kPartCol[i]);
 
             // Tridex II: this part's own split point
             const char* splitIds[] = { "syn_split", "br_split", "st_split" };
             auto sp = std::make_unique<tdxui::SplitPointControl> (*proc.apvts.getParameter (splitIds[i]));
+            sp->colour = kPartCol[i];
             sp->setBounds (col (1) - 22, y + 32, 44, 13);
             sp->setTooltip (juce::String (names[i]) + " split point: click the arrows, drag, or scroll; double-click for C3");
             addAndMakeVisible (*sp);
@@ -1001,6 +1063,12 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     keyboard.setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha (0.35f));
     addAndMakeVisible (keyboard);
 
+    // Split indicators drawn over the keys
+    splitOverlay = std::make_unique<tdxui::SplitOverlay> (proc.apvts, keyboard);
+    splitOverlay->setBounds (keyboard.getBounds());
+    addAndMakeVisible (*splitOverlay);
+    splitOverlay->refreshIfChanged();
+
     startTimerHz (15);
 }
 
@@ -1044,6 +1112,7 @@ void TridexPanel::timerCallback()
     for (int i = 0; i < 8; ++i)
         progBtns[(size_t) i]->lit = ! manual && ! writeArmed && cur % 8 == i;
     writeBtn->repaint(); manualBtn->repaint();
+    if (splitOverlay) splitOverlay->refreshIfChanged();
     if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
