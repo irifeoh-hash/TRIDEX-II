@@ -4,7 +4,7 @@
 
 TRIDEX II is a performing-keyboard instrument plugin (VST3 on Windows and macOS, plus AU on macOS),
 inspired by the Korg Trident Mk II. Like the original, it has three instrument sections:
-**SYNTHESIZER**, **BRASS** and **STRINGS**. They share 8 voices and can be split or layered across the keyboard.
+**SYNTHESIZER**, **BRASS** and **STRINGS**. They share 8 voices (or 16) and can be split or layered across the keyboard.
 TRIDEX II adds per-part arpeggiators and step gates, chorus/ensemble, tape/VHS effects,
 mono and legato modes, a true-polyphonic brass mode, and separate outputs for each part.
 
@@ -97,12 +97,26 @@ Only one pop-up page (ARP, CHORUS, TAPE or About) is open at a time. The button 
 
 | Control | What it does |
 |---|---|
-| **ASSIGN MODE 1 / 2** | How the 8 voices are handed out. **1**: each new note goes to the next voice in rotation, so release tails ring on. **2**: a note that was played before reuses the same voice, otherwise the lowest free voice is used. |
+| **ASSIGN MODE 1 / 2** | How the voices are handed out. **1**: each new note goes to the next voice in rotation, so release tails ring on. **2**: a note that was played before reuses the same voice, otherwise the lowest free voice is used. |
 | **TOTAL TUNE** | Master tuning, ±100 cents. |
 | **KBD SPLIT: SYNTHE / BRASS / STRINGS** | Sets where each part plays. **L** plays below that part's split point, **H** plays above it, and **L+H** plays the whole keyboard. |
 | **Split point** (small display under each selector) | That part's own split note. Click the arrows to step it, drag or scroll to move it, and double-click the middle to reset to C3. |
 
+| **POLYPHONY** | **8 Voices (Classic)**, as on the original, or **16 Voices**. |
+
 Each part has its own split point, so you can layer two parts on one side and keep the third on the other.
+
+### How polyphony works
+The voices are **shared** by all three parts, as on the original:
+- **One key, one voice.** A key uses one voice however many parts are layered on it. Holding a chord with
+  SYNTHE, BRASS and STRINGS all layered on those keys uses one voice per key, not three.
+- **Splits share the pool.** With the synth on the left hand and the strings on the right, notes from both hands count
+  toward the same limit (8 or 16).
+- **Mono parts** (synth or brass MONO) use one voice from the pool.
+- **Over the limit**, the oldest note is taken for the new one with a short fade, so it doesn't click.
+
+**16 Voices** gives you room for big two-handed layers and long release tails. It uses roughly twice the CPU
+when all 16 voices are sounding. Switching back to 8 never cuts off notes that are already playing.
 
 ---
 
@@ -122,7 +136,7 @@ A stereo flanger with a selector for each part.
 
 ## 6. SYNTHESIZER
 
-An 8-voice polyphonic synth with two divider-style VCOs, a 4-pole resonant filter and two ADSRs per voice.
+A polyphonic synth (8 or 16 voices, see POLYPHONY in section 4) with two divider-style VCOs, a 4-pole resonant filter and two ADSRs per voice.
 The knobs in this section are **programmable**: they are stored by the Programmer (see section 7).
 
 ### VCO 1
@@ -358,7 +372,7 @@ keys ─ arps ─────┼─ BRASS ─────── step gate ─ CH
                                 (each effect only applies to the parts selected on it)
 ```
 
-The three parts share the same 8 voices, as on the original. Each part is also sent to its own output (see section 17).
+The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. Each part is also sent to its own output (see section 17).
 
 ---
 

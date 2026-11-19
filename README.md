@@ -21,7 +21,7 @@ Install steps are in the [manual](MANUAL.md#1-installing) and in the README insi
 
 ## Features
 
-- **Three sections that share 8 voices**, as on the original:
+- **Three sections that share one voice pool**: 8 voices (classic) or 16, selectable under KEY ASSIGN.
   - **SYNTHESIZER**: two divider VCOs, a 4-pole resonant VCF, two ADSRs, and a 32-slot programmer.
   - **BRASS**: two oscillators, paraphonic (the original) or true polyphonic.
   - **STRINGS**: ensemble, bowing, vibrato and EQ.

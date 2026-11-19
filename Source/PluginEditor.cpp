@@ -617,7 +617,7 @@ void AboutPage::paint (juce::Graphics& g)
     const juce::String synopsis =
         "Tridex II is a three-part performance synthesizer inspired by the classic early-80s "
         "\"stack of keyboards in one\" polysynths. A polyphonic SYNTHESIZER, a BRASS section and an "
-        "ensemble STRINGS section share eight analog-modelled voices, each part with its own "
+        "ensemble STRINGS section share eight (or sixteen) analog-modelled voices, each part with its own "
         "filter, envelopes, keyboard split and output.\n\n"
         "It started as a faithful study of the original circuits (divider-based oscillators, "
         "paraphonic brass, three-phase string ensemble) and grew into a modern instrument: "
@@ -1213,6 +1213,12 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             addAndMakeVisible (*sp);
             owned.push_back (std::move (sp));
         }
+        // Tridex II: polyphony, 8 (classic) or 16 voices shared by all parts
+        {
+            auto& pc = combo ("polyphony", x + 6, kSwY + 14, 2 * kCol - 12);
+            pc.setTooltip ("Polyphony: 8 voices (classic Trident) or 16 voices, shared by all three parts");
+            text ({ (float) x, (float) kSwY + 40, 2.0f * kCol, 11 }, "POLYPHONY", 8.0f, true);
+        }
         auto [a, b] = sectionEnd (2);
         moduleLabel ((float) a + kCol, (float) b, kModY, "KBD SPLIT");
         sectionBar ((float) a, (float) b, kBarY, "KEY ASSIGN");
@@ -1439,6 +1445,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         prioBox.setTooltip ("Note priority for Synth and Brass MONO");
         addAndMakeVisible (prioBox);
         prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
+
     }
 
     lcd = { 300, 9, 130, 24 };

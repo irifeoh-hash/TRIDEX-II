@@ -40,6 +40,7 @@ int main (int argc, char** argv)
     const char* out = argc > 1 ? argv[1] : ".";
     int fails = 0;
     tdx::Params synth; fails += render ("polysynth", synth, out);
+    tdx::Params p16; p16.numVoices = 16; p16.stOn = true; fails += render ("poly16", p16, out);
     tdx::Params pwm;   pwm.v1Wave = tdx::Vco1Wave::PWM; pwm.pwInt = 0.8f; pwm.v2Scale = 3; pwm.v2Wave = tdx::Vco1Wave::PW; fails += render ("pwm", pwm, out);
     tdx::Params brass; brass.synOn = false; brass.brOn = true; brass.br16 = true; brass.br1Wave = 2; brass.br2Scale = 2; brass.br2Wave = 1; brass.br2Detune = 12.0f; fails += render ("brass", brass, out);
     tdx::Params str;   str.synOn = false; str.stOn = true; str.kbdBalance = 0.7f; str.bowOn = true; fails += render ("strings", str, out);

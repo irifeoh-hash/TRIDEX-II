@@ -68,6 +68,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    int numVoices = 8;                                  // Tridex II: polyphony, 8 (classic) or 16
     int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
     bool brPoly = false;                                // Tridex II: true polyphonic brass (own EG + VCF + VCA per note) vs paraphonic
@@ -167,7 +168,7 @@ struct Voice
 class Engine
 {
 public:
-    static constexpr int kVoices = 8;
+    static constexpr int kVoices = 16;   // pool size; p.numVoices (8 or 16) of them are used
     Params p;
 
     void prepare (double sampleRate)
@@ -602,22 +603,26 @@ private:
     {
         for (auto& v : voices) if (v.note == note && v.isActive()) return stamp (v);
 
+        // Only the first n voices are assignable (8 = classic, 16 = Tridex II). Voices above n that
+        // are still sounding after a switch from 16 to 8 just finish their notes.
+        const int n = std::clamp (p.numVoices, 1, kVoices);
         if (p.assignMode == 0)
         {
-            for (int k = 0; k < kVoices; ++k)
+            if (nextVoice >= n) nextVoice = 0;
+            for (int k = 0; k < n; ++k)
             {
-                auto& v = voices[(size_t) ((nextVoice + k) % kVoices)];
-                if (! v.keyDown && ! v.isActive()) { nextVoice = (nextVoice + k + 1) % kVoices; return stamp (v); }
+                auto& v = voices[(size_t) ((nextVoice + k) % n)];
+                if (! v.keyDown && ! v.isActive()) { nextVoice = (nextVoice + k + 1) % n; return stamp (v); }
             }
         }
         else
         {
-            for (auto& v : voices) if (! v.keyDown) return stamp (v);   // lowest unit not held, even if releasing
+            for (int i = 0; i < n; ++i) if (! voices[(size_t) i].keyDown) return stamp (voices[(size_t) i]);   // lowest unit not held
         }
         // Steal: oldest released voice, else oldest held.
         Voice* best = nullptr;
-        for (auto& v : voices) if (! v.keyDown && (! best || v.age < best->age)) best = &v;
-        if (! best) for (auto& v : voices) if (! best || v.age < best->age) best = &v;
+        for (int i = 0; i < n; ++i) { auto& v = voices[(size_t) i]; if (! v.keyDown && (! best || v.age < best->age)) best = &v; }
+        if (! best) for (int i = 0; i < n; ++i) { auto& v = voices[(size_t) i]; if (! best || v.age < best->age) best = &v; }
         return stamp (*best);
     }
 
