@@ -102,7 +102,7 @@ Only one pop-up page (ARP, CHORUS, TAPE or About) is open at a time. The button 
 | **KBD SPLIT: SYNTHE / BRASS / STRINGS** | Sets where each part plays. **L** plays below that part's split point, **H** plays above it, and **L+H** plays the whole keyboard. |
 | **Split point** (small display under each selector) | That part's own split note. Click the arrows to step it, drag or scroll to move it, and double-click the middle to reset to C3. |
 
-| **POLYPHONY** | **8 Voices (Classic)**, as on the original, or **16 Voices**. |
+| **POLYPHONY** (red display) | **8 VOICE** (classic, as on the original) or **16 VOICE**. Click the display, or scroll on it, to switch. |
 
 Each part has its own split point, so you can layer two parts on one side and keep the third on the other.
 
@@ -417,5 +417,5 @@ All knobs and switches can be automated from your DAW.
 
 ---
 
-*TRIDEX II by I Rife — [instagram.com/irife](https://www.instagram.com/irife).
+*TRIDEX II by Irife — [instagram.com/irife](https://www.instagram.com/irife).
 Korg and Trident are trademarks of Korg Inc. This independent project is not affiliated with or endorsed by Korg.*

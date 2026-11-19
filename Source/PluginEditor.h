@@ -113,6 +113,20 @@ private:
     bool dragging = false;
 };
 
+// POLYPHONY: small red LED display, 8 or 16 voices; click (or an arrow, or scroll) to switch.
+class PolyDisplay : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    PolyDisplay (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+private:
+    juce::ParameterAttachment attachment;
+    int index = 0;   // 0 = 8 voices, 1 = 16 voices
+};
+
 // Draws each part's keyboard range (coloured bars) and split point (coloured line) over the keys.
 class SplitOverlay : public juce::Component
 {

@@ -344,6 +344,36 @@ void SplitPointControl::paint (juce::Graphics& g)
     g.drawText (juce::MidiMessage::getMidiNoteName (note, true, true, 3), b, juce::Justification::centred);
 }
 
+PolyDisplay::PolyDisplay (juce::RangedAudioParameter& p)
+    : attachment (p, [this] (float v) { index = juce::roundToInt (v); repaint(); })
+{
+    attachment.sendInitialUpdate();
+}
+
+void PolyDisplay::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0xff1d0705));
+    g.fillRoundedRectangle (b, 2.5f);
+    g.setColour (kLedOn.withAlpha (0.6f));
+    const float cy = b.getCentreY();
+    juce::Path l, r;
+    l.addTriangle (b.getX() + 4, cy, b.getX() + 9, cy - 4, b.getX() + 9, cy + 4);
+    r.addTriangle (b.getRight() - 4, cy, b.getRight() - 9, cy - 4, b.getRight() - 9, cy + 4);
+    g.fillPath (l); g.fillPath (r);
+    g.setColour (kLedOn);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::bold));
+    g.drawText (index == 1 ? "16 VOICE" : " 8 VOICE", b, juce::Justification::centred);
+}
+
+void PolyDisplay::mouseDown (const juce::MouseEvent&) { attachment.setValueAsCompleteGesture (index == 1 ? 0.0f : 1.0f); }
+
+void PolyDisplay::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+{
+    if (w.deltaY > 0 && index != 1) attachment.setValueAsCompleteGesture (1.0f);
+    if (w.deltaY < 0 && index != 0) attachment.setValueAsCompleteGesture (0.0f);
+}
+
 void SplitPointControl::setNote (int n)
 {
     n = juce::jlimit (24, 108, n);
@@ -612,7 +642,7 @@ void AboutPage::paint (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold).withKerningFactor (0.08f));
     g.setColour (kInk);
-    g.drawText ("PERFORMING KEYBOARD  /  BY I RIFE", 330, 98, 500, 18, juce::Justification::centredLeft);
+    g.drawText ("PERFORMING KEYBOARD  /  BY IRIFE", 330, 98, 500, 18, juce::Justification::centredLeft);
 
     const juce::String synopsis =
         "Tridex II is a three-part performance synthesizer inspired by the classic early-80s "
@@ -624,7 +654,7 @@ void AboutPage::paint (juce::Graphics& g)
         "two-oscillator synth and brass with glide, true mono and paraphonic or polyphonic brass, "
         "per-part arpeggiators and step gates synced to your DAW, a chorus with a dimension-style "
         "SPACE mode, a tape / VHS processor, per-part octave and split controls, 32 program memories and separate outputs.\n\n"
-        "Designed and produced by I Rife.";
+        "Designed and produced by Irife.";
     g.setColour (kInk);
     g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
     g.drawText ("Thank you for trying this project!", 330, 132, getWidth() - 380, 22, juce::Justification::centredLeft);
@@ -1215,9 +1245,12 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         }
         // Tridex II: polyphony, 8 (classic) or 16 voices shared by all parts
         {
-            auto& pc = combo ("polyphony", x + 6, kSwY + 14, 2 * kCol - 12);
-            pc.setTooltip ("Polyphony: 8 voices (classic Trident) or 16 voices, shared by all three parts");
-            text ({ (float) x, (float) kSwY + 40, 2.0f * kCol, 11 }, "POLYPHONY", 8.0f, true);
+            auto pd = std::make_unique<tdxui::PolyDisplay> (*proc.apvts.getParameter ("polyphony"));
+            pd->setBounds (x + 14, kSwY + 14, 2 * kCol - 28, 24);
+            pd->setTooltip ("Polyphony: 8 voices (classic Trident) or 16 voices, shared by all three parts. Click to switch.");
+            addAndMakeVisible (*pd);
+            owned.push_back (std::move (pd));
+            text ({ (float) x, (float) kSwY + 42, 2.0f * kCol, 11 }, "POLYPHONY", 8.0f, true);
         }
         auto [a, b] = sectionEnd (2);
         moduleLabel ((float) a + kCol, (float) b, kModY, "KBD SPLIT");
