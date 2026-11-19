@@ -78,5 +78,5 @@ CC64 = foot switch (Off, Damper/Auto Damp release switch, or Hold).
 ## Credits and legal
 
 TRIDEX II is designed by I Rife ([instagram.com/irife](https://www.instagram.com/irife)).
-The I Rife logo is © I Rife. All rights reserved.
+The Irife logo is © Irife. All rights reserved.
 Korg and Trident are trademarks of Korg Inc. This independent project is not affiliated with or endorsed by Korg.
