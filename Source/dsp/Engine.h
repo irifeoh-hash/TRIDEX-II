@@ -499,7 +499,7 @@ public:
                 sL = stringsVcfL.process (sL); sR = stringsVcfR.process (sR);
             }
             sL = eqHiL.process (eqLoL.process (sL)) * p.stVolume * kStTrim;
-            sR = eqHiR.process (eqLoR.process (sR)) * p.stVolume;
+            sR = eqHiR.process (eqLoR.process (sR)) * p.stVolume * kStTrim;
 
             const float synth = synSum * p.synVolume * kSynTrim;
 
