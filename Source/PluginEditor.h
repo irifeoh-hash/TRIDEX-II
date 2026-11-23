@@ -121,10 +121,23 @@ public:
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    juce::String text0 { " 8 VOICE" }, text1 { "16 VOICE" };   // what the display shows for each state
 
 private:
     juce::ParameterAttachment attachment;
     int index = 0;   // 0 = 8 voices, 1 = 16 voices
+};
+
+// SETTINGS page (Tridex II): opened/closed with the SETTINGS button in the top bar.
+class SettingsPage : public juce::Component
+{
+public:
+    explicit SettingsPage (juce::AudioProcessorValueTreeState& state);
+    void paint (juce::Graphics&) override;
+
+private:
+    std::unique_ptr<PolyDisplay> quality;
+    juce::Rectangle<int> card;
 };
 
 // Draws each part's keyboard range (coloured bars) and split point (coloured line) over the keys.
@@ -333,6 +346,9 @@ private:
     std::unique_ptr<tdxui::AboutPage> aboutPage;
     std::unique_ptr<tdxui::TapePage> tapePage;
     tdxui::LedButton* tapeBtn = nullptr;
+    std::unique_ptr<tdxui::SettingsPage> settingsPage;
+    tdxui::LedButton* settingsBtn = nullptr;
+    void togglePage (juce::Component* page);   // show one overlay page (or hide it if open); closes the others
     std::unique_ptr<tdxui::LogoHotspot> logoHotspot;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;

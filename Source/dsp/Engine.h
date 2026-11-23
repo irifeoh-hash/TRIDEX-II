@@ -68,6 +68,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    bool ecoQuality = false;                            // Tridex II: filter QUALITY (false Normal 2x, true Eco 1x)
     int numVoices = 8;                                  // Tridex II: polyphony, 8 (classic) or 16
     int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
     bool brPolyVcf = false;                             // Tridex II: one brass filter per note instead of one shared
@@ -274,6 +275,12 @@ public:
     // partL / partR (optional): per-part outputs [0] Synth, [1] Brass, [2] Strings; null entries are skipped.
     void render (float* outL, float* outR, int numSamples, float* const* partL = nullptr, float* const* partR = nullptr)
     {
+        if (p.ecoQuality != ecoApplied)
+        {
+            ecoApplied = p.ecoQuality;
+            for (auto& v : voices) { v.vcf.eco = ecoApplied; v.brVcf.eco = ecoApplied; }
+            brassVcf.eco = stringsVcfL.eco = stringsVcfR.eco = ecoApplied;
+        }
         updateCoefficients();
         const double invSr = 1.0 / sr;
         const float kbd = kKbdTrack[std::clamp (p.kbdTrack, 0, 4)];
@@ -1018,6 +1025,7 @@ private:
     int nextVoice = 0;
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
+    bool ecoApplied = false;
     OnePoleLP stSmoothL1, stSmoothL2, stSmoothR1, stSmoothR2;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;

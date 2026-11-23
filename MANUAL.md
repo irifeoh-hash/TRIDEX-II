@@ -83,13 +83,21 @@ A red LED on a switch means it is on.
 | **ARP** | Opens or closes the ARP page (arpeggiators and step gates). |
 | **CHORUS** | Opens or closes the CHORUS page. |
 | **TAPE** | Opens or closes the TAPE page. |
+| **SETTINGS** | Opens or closes the SETTINGS page (see below). |
 | **Priority** | Note priority for the mono modes: **Last**, **First**, **Low** or **High**. It decides which held note a mono part plays. |
 | **BEND** | Pitch-bend range for the joystick and MIDI pitch bend, 0–12 semitones. |
 | **DRIFT** | Analog drift. Small random per-voice tuning differences and slow wander, like old oscillators. 0 is perfectly in tune. |
 | **VELO** | Velocity sensitivity. The original had none, so 0 plays like the hardware. |
 | **Pedal** | Sustain pedal (CC64) behaviour: **Off**; **Damper (S-1)**, a Trident-style release switch that works with AUTO DAMP; or **Hold**, a normal sustain pedal. |
 
-Only one pop-up page (ARP, CHORUS, TAPE or About) is open at a time. The button for the open page is lit.
+Only one pop-up page (ARP, CHORUS, TAPE, SETTINGS or About) is open at a time. The button for the open page is lit.
+
+### SETTINGS page
+Settings are saved with your project.
+
+| Setting | What it does |
+|---|---|
+| **QUALITY** (red display) | **NORMAL**: all filters (synth, brass and strings) run 2× oversampled, for the cleanest resonance and saturation. **ECO**: the filters run at the host sample rate, using roughly 20–40% less CPU. That's useful in big projects or on laptops. At very high cutoff with high resonance, ECO sounds a little brighter and louder. Click the display, or scroll on it, to switch. |
 
 ---
 

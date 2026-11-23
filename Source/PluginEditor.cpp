@@ -363,7 +363,7 @@ void PolyDisplay::paint (juce::Graphics& g)
     g.fillPath (l); g.fillPath (r);
     g.setColour (kLedOn);
     g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::bold));
-    g.drawText (index == 1 ? "16 VOICE" : " 8 VOICE", b, juce::Justification::centred);
+    g.drawText (index == 1 ? text1 : text0, b, juce::Justification::centred);
 }
 
 void PolyDisplay::mouseDown (const juce::MouseEvent&) { attachment.setValueAsCompleteGesture (index == 1 ? 0.0f : 1.0f); }
@@ -671,6 +671,60 @@ void AboutPage::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (9.0f));
     g.drawText ("Korg and Trident are trademarks of Korg Inc. This independent project is not affiliated with or endorsed by Korg.",
                 330, getHeight() - 30, getWidth() - 360, 14, juce::Justification::centredLeft);
+}
+
+//==============================================================================
+SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state)
+{
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;
+    setSize (W, H);
+    card = { 18, 40, W - 36, 220 };
+    quality = std::make_unique<PolyDisplay> (*state.getParameter ("quality"));
+    quality->text0 = "NORMAL";
+    quality->text1 = "ECO";
+    quality->setBounds (card.getX() + 30, card.getY() + 58, 110, 26);
+    quality->setTooltip ("Filter quality: NORMAL = 2x oversampled filters, ECO = lower CPU. Click to switch.");
+    addAndMakeVisible (*quality);
+}
+
+void SettingsPage::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText ("SETTINGS", 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText ("SAVED WITH YOUR PROJECT  /  PRESS SETTINGS AGAIN TO CLOSE", 110, 8, 600, 18, juce::Justification::centredLeft);
+
+    const auto r = card.toFloat();
+    g.setColour (kPanel2);
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (kInk.withAlpha (0.2f));
+    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+
+    g.setColour (kInk.withAlpha (0.7f));
+    g.setFont (juce::FontOptions (9.0f, juce::Font::bold).withKerningFactor (0.1f));
+    g.drawText ("SOUND / CPU", card.getX() + 24, card.getY() + 18, 300, 14, juce::Justification::centredLeft);
+
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+    const auto qb = quality->getBounds();
+    g.drawText ("QUALITY", qb.getX(), qb.getBottom() + 4, qb.getWidth(), 12, juce::Justification::centred);
+
+    g.setColour (kInk.withAlpha (0.75f));
+    g.setFont (juce::FontOptions (10.0f));
+    g.drawFittedText ("NORMAL: the filters run 2x oversampled, so resonance and saturation stay clean and smooth at high settings.\n"
+                      "ECO: the filters run at the host sample rate. Uses noticeably less CPU, useful for big projects or laptops. "
+                      "Very high cutoff and resonance can sound slightly harsher.",
+                      qb.getRight() + 30, qb.getY() - 6, card.getRight() - qb.getRight() - 60, 50, juce::Justification::centredLeft, 4);
+
+    g.setColour (kInk.withAlpha (0.45f));
+    g.setFont (juce::FontOptions (9.0f));
+    g.drawText ("More settings (MIDI channels, tuning, window size) will live here.", card.getX() + 24, card.getBottom() - 28, 600, 14,
+                juce::Justification::centredLeft);
 }
 
 //==============================================================================
@@ -1493,8 +1547,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->setTooltip ("Show / hide the arpeggiator page");
         b->onClick = [this]
         {
-            arpPage->setVisible (! arpPage->isVisible());
-            if (arpPage->isVisible()) { chorusPage->setVisible (false); if (aboutPage) aboutPage->setVisible (false); if (tapePage) tapePage->setVisible (false); arpPage->toFront (false); }
+            togglePage (arpPage.get());
         };
         addAndMakeVisible (*b);
         arpBtn = b.get();
@@ -1511,8 +1564,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     logoHotspot->setTooltip ("About Tridex II");
     logoHotspot->onClick = [this]
     {
-        aboutPage->setVisible (! aboutPage->isVisible());
-        if (aboutPage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); if (tapePage) tapePage->setVisible (false); aboutPage->toFront (false); }
+        togglePage (aboutPage.get());
     };
     addAndMakeVisible (*logoHotspot);
 
@@ -1526,8 +1578,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->setTooltip ("Show / hide the chorus page");
         b->onClick = [this]
         {
-            chorusPage->setVisible (! chorusPage->isVisible());
-            if (chorusPage->isVisible()) { arpPage->setVisible (false); aboutPage->setVisible (false); if (tapePage) tapePage->setVisible (false); chorusPage->toFront (false); }
+            togglePage (chorusPage.get());
         };
         addAndMakeVisible (*b);
         chorusBtn = b.get();
@@ -1545,12 +1596,26 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         b->setTooltip ("Show / hide the tape page");
         b->onClick = [this]
         {
-            tapePage->setVisible (! tapePage->isVisible());
-            if (tapePage->isVisible()) { arpPage->setVisible (false); chorusPage->setVisible (false); aboutPage->setVisible (false); tapePage->toFront (false); }
+            togglePage (tapePage.get());
         };
         addAndMakeVisible (*b);
         tapeBtn = b.get();
         owned.push_back (std::move (b));
+    }
+
+    // ---------------- SETTINGS page toggle (Tridex II)
+    settingsPage = std::make_unique<tdxui::SettingsPage> (proc.apvts);
+    settingsPage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*settingsPage);
+    {
+        auto b = std::make_unique<tdxui::LedButton> ("SETTINGS");
+        b->setBounds (lcd.getRight() + 282, 4, 30, 32);
+        b->setTooltip ("Show / hide the settings page");
+        b->onClick = [this] { togglePage (settingsPage.get()); };
+        addAndMakeVisible (*b);
+        settingsBtn = b.get();
+        owned.push_back (std::move (b));
+        text ({ (float) lcd.getRight() + 316, 13, 70, 14 }, "SETTINGS", 10.0f, true, juce::Justification::centredLeft);
         text ({ (float) lcd.getRight() + 224, 13, 44, 14 }, "TAPE", 10.0f, true, juce::Justification::centredLeft);
     }
 
@@ -1603,6 +1668,17 @@ void TridexPanel::programPressed (int number)
     proc.recallProgram (bank * 8 + number);
 }
 
+void TridexPanel::togglePage (juce::Component* page)
+{
+    if (page == nullptr) return;
+    const bool show = ! page->isVisible();
+    for (juce::Component* c : { (juce::Component*) arpPage.get(), (juce::Component*) chorusPage.get(), (juce::Component*) tapePage.get(),
+                                (juce::Component*) aboutPage.get(), (juce::Component*) settingsPage.get() })
+        if (c != nullptr) c->setVisible (false);
+    page->setVisible (show);
+    if (show) page->toFront (false);
+}
+
 void TridexPanel::timerCallback()
 {
     const bool manual = proc.isManual();
@@ -1620,6 +1696,7 @@ void TridexPanel::timerCallback()
     if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
     if (chorusBtn->lit != chorusPage->isVisible()) { chorusBtn->lit = chorusPage->isVisible(); chorusBtn->repaint(); }
     if (tapeBtn && tapeBtn->lit != tapePage->isVisible()) { tapeBtn->lit = tapePage->isVisible(); tapeBtn->repaint(); }
+    if (settingsBtn && settingsBtn->lit != settingsPage->isVisible()) { settingsBtn->lit = settingsPage->isVisible(); settingsBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
 

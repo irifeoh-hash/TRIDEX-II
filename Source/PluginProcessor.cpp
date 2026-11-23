@@ -103,6 +103,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "pedal_mode", "Pedal Mode", { "Off", "Damper (S-1)", "Hold" }, 2);
     addC (l, "note_prio",  "Note Priority", { "Last", "First", "Low", "High" }, 0);
     addC (l, "polyphony",  "Polyphony", { "8 Voices (Classic)", "16 Voices" }, 0);
+    addC (l, "quality",    "Quality", { "Normal", "Eco" }, 0);   // filter oversampling: Normal 2x, Eco 1x (lower CPU)
 
     // ---- Synthesizer section (programmable)
     addB (l, "syn_on",    "Synthe Output", true);
@@ -302,7 +303,7 @@ void TridexProcessor::syncParams()
     p.splitPoint = idx ("split");
     p.splits = { juce::roundToInt (get ("syn_split")), juce::roundToInt (get ("br_split")), juce::roundToInt (get ("st_split")) }; p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));
     p.octShift = { juce::roundToInt (get ("syn_octsh")), juce::roundToInt (get ("br_octsh")), juce::roundToInt (get ("st_octsh")) }; p.drift = get ("drift");
-    p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode"); p.notePriority = idx ("note_prio"); p.numVoices = idx ("polyphony") == 1 ? 16 : 8;
+    p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode"); p.notePriority = idx ("note_prio"); p.numVoices = idx ("polyphony") == 1 ? 16 : 8; p.ecoQuality = idx ("quality") == 1;
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));

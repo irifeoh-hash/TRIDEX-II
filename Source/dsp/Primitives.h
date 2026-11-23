@@ -142,8 +142,9 @@ struct Ladder
 
     void setCutoff (float hz, float res)
     {
-        hz = std::clamp (hz, 10.0f, sr * 0.45f);
-        g = std::tan (kPi * hz / (2.0f * sr));     // coefficients at the 2x rate
+        // Normal: coefficients at the 2x rate. Eco: at the host rate (cutoff kept below ~0.42 x sr).
+        hz = std::clamp (hz, 10.0f, eco ? sr * 0.42f : sr * 0.45f);
+        g = std::tan (kPi * hz / (eco ? sr : 2.0f * sr));
         G = g / (1.0f + g);
         res = std::clamp (res, 0.0f, 1.0f);
         k = 3.95f * (res * (1.25f - 0.25f * res));  // eases in, so the top of the knob is less shrill
@@ -151,6 +152,7 @@ struct Ladder
 
     float process (float x)
     {
+        if (eco) { xPrev = x; return step (x); }   // Eco quality: one step per sample
         // 2x oversampling: linear-interpolated input, averaged (decimated) output.
         const float a = step (0.5f * (x + xPrev));
         const float b = step (x);
@@ -160,6 +162,7 @@ struct Ladder
 
     float compensation = 0.6f;   // 0 = classic bass loss with resonance, 1 = flat passband
     float drive = 0.8f;          // saturation amount per stage
+    bool eco = false;            // Tridex II QUALITY: false = Normal (2x oversampled), true = Eco (1x, lower CPU)
 
 private:
     float sat (float v) const { return softClip (v * drive) / drive; }
