@@ -194,7 +194,13 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
+    void addKnob (const char* id, juce::Rectangle<int> r, const juce::String& label);
+    void addScreen (const char* id, juce::Rectangle<int> r, const juce::String& label, const juce::String& tip);
+    juce::AudioProcessorValueTreeState& apvts;
     std::unique_ptr<PolyDisplay> quality;
+    std::vector<std::unique_ptr<juce::Component>> comps;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> labels;
     juce::Rectangle<int> card;
 };
 
@@ -391,7 +397,6 @@ private:
     std::vector<std::unique_ptr<juce::Component>> owned;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> pedalAtt;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
     std::vector<Text> texts;
     std::vector<Bar> bars;
@@ -421,8 +426,6 @@ private:
     juce::Rectangle<int> lcd;
     juce::String lcdText;
 
-    juce::ComboBox pedalBox, prioBox;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> prioAtt;
     juce::MidiKeyboardComponent keyboard { proc.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard };
 };
 

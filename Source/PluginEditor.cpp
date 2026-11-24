@@ -1001,17 +1001,52 @@ void FxPage::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state)
+SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
 {
     const int W = TridexPanel::kW - 48, H = kLowerY - 40;
     setSize (W, H);
-    card = { 18, 40, W - 36, 220 };
+    card = { 18, 40, W - 36, 300 };
+    const int x0 = card.getX(), y = card.getY() + 56;
+
+    // MIDI & PLAYING
+    addScreen ("pedal_mode", { x0 + 30, y, 140, 24 }, "PEDAL", "Sustain pedal (CC64): OFF / DAMPER (Trident release switch, works with AUTO DAMP) / HOLD");
+    addScreen ("note_prio", { x0 + 190, y, 120, 24 }, "NOTE PRIORITY", "Which held note a MONO part plays: LAST / FIRST / LOW / HIGH");
+    addKnob ("bend_range", { x0 + 330, y - 16, 56, 56 }, "BEND RANGE");
+    addKnob ("vel_sens", { x0 + 400, y - 16, 56, 56 }, "VELOCITY");
+    // TUNING
+    addKnob ("drift", { x0 + 520, y - 16, 56, 56 }, "ANALOG DRIFT");
+    // SOUND / CPU
     quality = std::make_unique<PolyDisplay> (*state.getParameter ("quality"));
     quality->text0 = "NORMAL";
     quality->text1 = "ECO";
-    quality->setBounds (card.getX() + 30, card.getY() + 58, 110, 26);
+    quality->setBounds (x0 + 650, y, 110, 24);
     quality->setTooltip ("Filter quality: NORMAL = 2x oversampled filters, ECO = lower CPU. Click to switch.");
     addAndMakeVisible (*quality);
+    labels.push_back ({ quality->getBounds(), "QUALITY" });
+}
+
+void SettingsPage::addKnob (const char* id, juce::Rectangle<int> r, const juce::String& label)
+{
+    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("scale", juce::String (id) == "bend_range" ? "none" : "uni");   // bend is 0-12 st, not 0-10
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, this);
+    s->setBounds (r);
+    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
+    addAndMakeVisible (*s);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    labels.push_back ({ r, label });
+    comps.push_back (std::move (s));
+}
+
+void SettingsPage::addScreen (const char* id, juce::Rectangle<int> r, const juce::String& label, const juce::String& tip)
+{
+    auto c = std::make_unique<ChoiceScreen> (*apvts.getParameter (id));
+    c->setBounds (r);
+    c->setTooltip (tip);
+    addAndMakeVisible (*c);
+    labels.push_back ({ r, label });
+    comps.push_back (std::move (c));
 }
 
 void SettingsPage::paint (juce::Graphics& g)
@@ -1032,26 +1067,33 @@ void SettingsPage::paint (juce::Graphics& g)
     g.setColour (kInk.withAlpha (0.2f));
     g.drawRoundedRectangle (r, 6.0f, 1.0f);
 
+    // group headers and dividers
+    const int x0 = card.getX();
     g.setColour (kInk.withAlpha (0.7f));
     g.setFont (juce::FontOptions (9.0f, juce::Font::bold).withKerningFactor (0.1f));
-    g.drawText ("SOUND / CPU", card.getX() + 24, card.getY() + 18, 300, 14, juce::Justification::centredLeft);
+    g.drawText ("MIDI & PLAYING", x0 + 24, card.getY() + 18, 300, 14, juce::Justification::centredLeft);
+    g.drawText ("TUNING", x0 + 500, card.getY() + 18, 200, 14, juce::Justification::centredLeft);
+    g.drawText ("SOUND / CPU", x0 + 630, card.getY() + 18, 200, 14, juce::Justification::centredLeft);
+    g.setColour (kInk.withAlpha (0.12f));
+    g.drawVerticalLine (x0 + 482, (float) card.getY() + 16, (float) card.getY() + 120);
+    g.drawVerticalLine (x0 + 612, (float) card.getY() + 16, (float) card.getY() + 120);
+    g.drawHorizontalLine (card.getY() + 132, (float) x0 + 20, (float) card.getRight() - 20);
 
     g.setColour (kInk);
     g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
-    const auto qb = quality->getBounds();
-    g.drawText ("QUALITY", qb.getX(), qb.getBottom() + 4, qb.getWidth(), 12, juce::Justification::centred);
+    for (const auto& [b, text] : labels)
+        g.drawText (text, b.getX() - 20, b.getBottom() + 4, b.getWidth() + 40, 12, juce::Justification::centred);
 
     g.setColour (kInk.withAlpha (0.75f));
     g.setFont (juce::FontOptions (10.0f));
-    g.drawFittedText ("NORMAL: the filters run 2x oversampled, so resonance and saturation stay clean and smooth at high settings.\n"
-                      "ECO: the filters run at the host sample rate. Uses noticeably less CPU, useful for big projects or laptops. "
-                      "Very high cutoff and resonance can sound slightly harsher.",
-                      qb.getRight() + 30, qb.getY() - 6, card.getRight() - qb.getRight() - 60, 50, juce::Justification::centredLeft, 4);
-
-    g.setColour (kInk.withAlpha (0.45f));
-    g.setFont (juce::FontOptions (9.0f));
-    g.drawText ("More settings (MIDI channels, tuning, window size) will live here.", card.getX() + 24, card.getBottom() - 28, 600, 14,
-                juce::Justification::centredLeft);
+    g.drawFittedText ("PEDAL: OFF ignores the sustain pedal. DAMPER is the Trident release switch: with AUTO DAMP on, holding it lets release tails ring. "
+                      "HOLD is a normal sustain pedal.\n"
+                      "NOTE PRIORITY: which held note a MONO part (synth or brass) plays: the LAST pressed, the FIRST, the LOWEST or the HIGHEST.\n"
+                      "BEND RANGE: joystick / pitch-wheel bend in semitones (0-12).   VELOCITY: 0 = no velocity response, as on the original.\n"
+                      "ANALOG DRIFT: small random tuning differences and slow wander per voice (0 = perfectly in tune).\n"
+                      "QUALITY: NORMAL runs the filters 2x oversampled (cleanest). ECO runs them at the host rate for roughly 20-40% less CPU; "
+                      "at very high cutoff with high resonance it is a little brighter.",
+                      x0 + 24, card.getY() + 144, card.getWidth() - 48, 110, juce::Justification::topLeft, 8);
 }
 
 //==============================================================================
@@ -1850,34 +1892,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     }
 
 
-    // ---------------- Plugin setup strip (not on the hardware)
-    {
-        const int y = 22;
-        int sx = kW - 304;
-        const auto mini = [&] (const char* id, const char* name, const char* tip)
-        {
-            knob (id, sx, y, "", false, 18).setTooltip (tip);
-            text ({ (float) sx + 15, 15, 44, 12 }, name, 8.0f, false, juce::Justification::centredLeft);
-            sx += 62;
-        };
-        mini ("bend_range", "BEND", "Joystick pitch-bend range");
-        mini ("drift", "DRIFT", "Analog drift (per-voice tuning tolerance)");
-        mini ("vel_sens", "VELO", "Velocity sensitivity (not on the hardware)");
-        pedalBox.addItemList ({ "Pedal: Off", "Pedal: Damper", "Pedal: Hold" }, 1);
-        pedalBox.setBounds (sx - 10, 10, 100, 22);
-        addAndMakeVisible (pedalBox);
-        pedalAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "pedal_mode", pedalBox);
-
-        // Tridex II: note priority for Synth / Brass MONO
-        prioBox.addItemList ({ "Priority: Last", "Priority: First", "Priority: Low", "Priority: High" }, 1);
-        prioBox.setBounds (kW - 418, 10, 100, 22);
-        prioBox.setTooltip ("Note priority for Synth and Brass MONO");
-        addAndMakeVisible (prioBox);
-        prioAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "note_prio", prioBox);
-
-    }
-
-    lcd = { 298, 9, 112, 24 };
+    lcd = { 300, 9, 130, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
