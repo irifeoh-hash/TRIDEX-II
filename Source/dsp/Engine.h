@@ -34,6 +34,27 @@ enum LfoDest
     kLfoNumDest
 };
 
+// Tridex II FX routing: the 24 orders of the 4 part effects (0 GATE, 1 CHORUS, 2 FLANGER, 3 TAPE),
+// in lexicographic order, so index 0 = GATE > CHORUS > FLANGER > TAPE (the classic order).
+inline const std::array<std::array<int, 4>, 24>& fxOrders()
+{
+    static const auto table = []
+    {
+        std::array<std::array<int, 4>, 24> t {};
+        std::array<int, 4> a { 0, 1, 2, 3 };
+        int n = 0;
+        do { t[(size_t) n++] = a; } while (std::next_permutation (a.begin(), a.end()));
+        return t;
+    }();
+    return table;
+}
+inline int fxOrderIndex (const std::array<int, 4>& order)
+{
+    const auto& t = fxOrders();
+    for (int i = 0; i < 24; ++i) if (t[(size_t) i] == order) return i;
+    return 0;
+}
+
 struct LfoParams
 {
     int wave = 1;                 // 0 Sine, 1 Triangle, 2 Saw Up, 3 Saw Down, 4 Square, 5 S&H, 6 Random (smooth)
@@ -94,6 +115,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    std::array<int, 3> fxOrder { 0, 0, 0 };            // Tridex II: effect order per part (index into fxOrders())
     LfoParams lfo;                                      // Tridex II: assignable LFO
     bool ecoQuality = false;                            // Tridex II: filter QUALITY (false Normal 2x, true Eco 1x)
     int numVoices = 8;                                  // Tridex II: polyphony, 8 (classic) or 16
@@ -460,6 +482,7 @@ public:
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
         const float volSmooth = 1.0f - std::exp (-1.0f / (0.0015f * sr));
+        const float fxDuckStep = 1.0f / (0.004f * sr);
         const float bowSlew = 1.0f - std::exp (-1.0f / (0.003f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const int stringFeet = std::max (1, (p.st16 ? 1 : 0) + (p.st8 ? 1 : 0) + (p.st4 ? 1 : 0));
@@ -712,8 +735,9 @@ public:
             // can also be sent to its own output. Sends are crossfaded (~10 ms): no clicks when switching.
             const bool chSel[3] = { p.chSynth, p.chBrass, p.chStrings };
             const bool flSel[3] = { p.flSynth, p.flBrass, p.flStrings };
-            const float secL[3] = { synth * gl[0], brass * gl[1], sL * gl[2] };
-            const float secR[3] = { synth * gr[0], brass * gr[1], sR * gr[2] };
+            const float secL[3] = { synth, brass, sL };
+            const float secR[3] = { synth, brass, sR };
+            const bool tpSel[3] = { p.tpSynth, p.tpBrass, p.tpStrings };
             float mixL = 0.0f, mixR = 0.0f;
             for (int s = 0; s < 3; ++s)
             {
@@ -721,20 +745,46 @@ public:
                 flSend[(size_t) s] += ((flSel[s] ? 1.0f : 0.0f) - flSend[(size_t) s]) * sendSmooth;
                 const float c = chSend[(size_t) s], f = flSend[(size_t) s];
 
-                float xl = secL[s], xr = secR[s];
-                float cl = xl, cr = xr;      // effects always run so they're ready when switched in
-                choruses[(size_t) s].process (cl, cr, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
-                xl += (cl - xl) * c;  xr += (cr - xr) * c;
-                float fl = xl, fr = xr;
-                flangers[(size_t) s].process (fl, fr, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
-                xl += (fl - xl) * f;  xr += (fr - xr) * f;
-                // Tape at the end of the part's chain (crossfaded in like the other effects)
-                const bool tpSel[3] = { p.tpSynth, p.tpBrass, p.tpStrings };
                 tpSend[(size_t) s] += (((p.tpOn && tpSel[s]) ? 1.0f : 0.0f) - tpSend[(size_t) s]) * sendSmooth;
-                float tl = xl, tr = xr;
-                tapes[(size_t) s].process (tl, tr, p.tpType, p.tpDrive[(size_t) s], p.tpWow, p.tpFlutter, p.tpSpeed,
-                                           p.tpDrift, p.tpAge, p.tpHiss, p.tpMix);
-                xl += (tl - xl) * tpSend[(size_t) s];  xr += (tr - xr) * tpSend[(size_t) s];
+
+                // FX ROUTING: a new order is switched in under a short duck (4 ms down, swap, 4 ms up)
+                // so reordering never clicks.
+                const int want = std::clamp (p.fxOrder[(size_t) s], 0, 23);
+                auto& duck = fxDuck[(size_t) s];
+                if (want != fxCur[(size_t) s]) { duck -= fxDuckStep; if (duck <= 0.0f) { duck = 0.0f; fxCur[(size_t) s] = want; } }
+                else if (duck < 1.0f) duck = std::min (1.0f, duck + fxDuckStep);
+
+                float xl = secL[s], xr = secR[s];
+                for (const int fx : fxOrders()[(size_t) fxCur[(size_t) s]])
+                {
+                    switch (fx)
+                    {
+                        case 0: xl *= gl[s]; xr *= gr[s]; break;   // STEP GATE
+                        case 1:
+                        {
+                            float cl = xl, cr = xr;      // effects always run so they're ready when switched in
+                            choruses[(size_t) s].process (cl, cr, p.chMode, p.chRate, p.chDepth, p.chMix, p.chSpace, p.chWidth, p.chTone);
+                            xl += (cl - xl) * c;  xr += (cr - xr) * c;
+                            break;
+                        }
+                        case 2:
+                        {
+                            float fl = xl, fr = xr;
+                            flangers[(size_t) s].process (fl, fr, p.flManual, p.flIntensity, p.flFeedback, p.flSpeed);
+                            xl += (fl - xl) * f;  xr += (fr - xr) * f;
+                            break;
+                        }
+                        default:
+                        {
+                            float tl = xl, tr = xr;
+                            tapes[(size_t) s].process (tl, tr, p.tpType, p.tpDrive[(size_t) s], p.tpWow, p.tpFlutter, p.tpSpeed,
+                                                       p.tpDrift, p.tpAge, p.tpHiss, p.tpMix);
+                            xl += (tl - xl) * tpSend[(size_t) s];  xr += (tr - xr) * tpSend[(size_t) s];
+                            break;
+                        }
+                    }
+                }
+                if (duck < 1.0f) { const float dg = duck * duck * (3.0f - 2.0f * duck); xl *= dg; xr *= dg; }
 
                 mixL += xl; mixR += xr;
                 if (partL != nullptr && partL[s] != nullptr)
@@ -1199,6 +1249,8 @@ private:
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
     bool ecoApplied = false;
+    std::array<int, 3> fxCur { 0, 0, 0 };              // effect order currently running per part
+    std::array<float, 3> fxDuck { 1.0f, 1.0f, 1.0f };  // gain while switching order
     float volS[4] { -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume
     OnePoleLP stSmoothL1, stSmoothL2, stSmoothR1, stSmoothR2;
     Adsr brassEnv;

@@ -844,6 +844,163 @@ void LfoPanel::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+namespace
+{
+    const char* kFxNames[] = { "GATE", "CHORUS", "FLANGER", "TAPE" };
+    const char* kFxOrderIds[] = { "fx_order_syn", "fx_order_br", "fx_order_st" };
+    const char* kLaneNames[] = { "SYNTHE", "BRASS", "STRINGS" };
+}
+
+FxPage::FxPage (juce::AudioProcessorValueTreeState& state) : apvts (state)
+{
+    const int W = TridexPanel::kW - 48, H = kLowerY - 40;
+    setSize (W, H);
+    link = std::make_unique<LedButton> ("LINK");
+    link->setClickingTogglesState (true);
+    link->cap = kCapBlue;
+    link->setBounds (40, 430, 34, 42);
+    link->setTooltip ("LINK ALL PARTS: moving a block in one lane moves it in all three");
+    addAndMakeVisible (*link);
+    linkAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, "fx_link", *link);
+    link->onClick = [this] { if (link->getToggleState()) setOrder (0, (int) apvts.getRawParameterValue (kFxOrderIds[0])->load()); repaint(); };
+
+    reset = std::make_unique<LedButton> ("RESET");
+    reset->setBounds (150, 430, 34, 42);
+    reset->setTooltip ("Back to the classic order: GATE > CHORUS > FLANGER > TAPE");
+    reset->onClick = [this] { for (int l = 0; l < 3; ++l) setOrder (l, 0); };
+    addAndMakeVisible (*reset);
+}
+
+juce::Rectangle<float> FxPage::blockRect (int lane, int slot) const
+{
+    return { 190.0f + (float) slot * 220.0f, 78.0f + (float) lane * 112.0f, 170.0f, 62.0f };
+}
+
+bool FxPage::fxActive (int lane, int fx) const
+{
+    const auto on = [this] (const juce::String& id) { return apvts.getRawParameterValue (id)->load() > 0.5f; };
+    static const char* sel[3][3] = { { "ch_syn", "fl_syn", "tp_syn" }, { "ch_br", "fl_br", "tp_br" }, { "ch_st", "fl_st", "tp_st" } };
+    switch (fx)
+    {
+        case 0:  return on ("sg" + juce::String (lane + 1) + "_on");
+        case 1:  return on ("ch_on") && on (sel[lane][0]);
+        case 2:  return on (sel[lane][1]);
+        default: return on ("tp_on") && on (sel[lane][2]);
+    }
+}
+
+void FxPage::setOrder (int lane, int index)
+{
+    const bool linked = apvts.getRawParameterValue ("fx_link")->load() > 0.5f;
+    for (int l = 0; l < 3; ++l)
+    {
+        if (! linked && l != lane) continue;
+        if (auto* prm = apvts.getParameter (kFxOrderIds[l]))
+        {
+            prm->beginChangeGesture();
+            prm->setValueNotifyingHost (prm->convertTo0to1 ((float) index));
+            prm->endChangeGesture();
+        }
+    }
+    repaint();
+}
+
+void FxPage::timerCallback() { repaint(); }
+
+void FxPage::mouseDown (const juce::MouseEvent& e)
+{
+    for (int lane = 0; lane < 3; ++lane)
+        for (int slot = 0; slot < 4; ++slot)
+        {
+            const auto r = blockRect (lane, slot);
+            if (! r.contains (e.position)) continue;
+            int dir = 0;
+            if (e.position.x < r.getX() + 30.0f) dir = -1;
+            else if (e.position.x > r.getRight() - 30.0f) dir = +1;
+            if (dir == 0 || slot + dir < 0 || slot + dir > 3) return;
+            auto order = tdx::fxOrders()[(size_t) juce::jlimit (0, 23, (int) apvts.getRawParameterValue (kFxOrderIds[lane])->load())];
+            std::swap (order[(size_t) slot], order[(size_t) (slot + dir)]);
+            setOrder (lane, tdx::fxOrderIndex (order));
+            return;
+        }
+}
+
+void FxPage::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText ("FX ROUTING", 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText ("EACH PART'S EFFECT ORDER  /  USE THE ARROWS ON A BLOCK TO MOVE IT  /  PRESS FX AGAIN TO CLOSE",
+                130, 8, 800, 18, juce::Justification::centredLeft);
+
+    for (int lane = 0; lane < 3; ++lane)
+    {
+        const auto col = kPartCol[lane];
+        const float cy = blockRect (lane, 0).getCentreY();
+        const auto card = juce::Rectangle<float> (18.0f, cy - 48.0f, (float) getWidth() - 36.0f, 96.0f);
+        g.setColour (kPanel2);
+        g.fillRoundedRectangle (card, 6.0f);
+        g.setColour (kInk.withAlpha (0.15f));
+        g.drawRoundedRectangle (card, 6.0f, 1.0f);
+
+        g.setColour (col);
+        g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+        g.drawText (kLaneNames[lane], 40, (int) cy - 10, 110, 20, juce::Justification::centredLeft);
+
+        // signal line through the lane
+        g.setColour (col.withAlpha (0.8f));
+        g.fillRect (130.0f, cy - 1.5f, (float) getWidth() - 220.0f, 3.0f);
+        juce::Path arrow; arrow.addTriangle ((float) getWidth() - 92.0f, cy - 7.0f, (float) getWidth() - 92.0f, cy + 7.0f, (float) getWidth() - 80.0f, cy);
+        g.fillPath (arrow);
+        g.setColour (kInk);
+        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.drawText ("OUT", getWidth() - 76, (int) cy - 8, 40, 16, juce::Justification::centredLeft);
+
+        const auto& order = tdx::fxOrders()[(size_t) juce::jlimit (0, 23, (int) apvts.getRawParameterValue (kFxOrderIds[lane])->load())];
+        for (int slot = 0; slot < 4; ++slot)
+        {
+            const int fx = order[(size_t) slot];
+            const bool act = fxActive (lane, fx);
+            const auto r = blockRect (lane, slot);
+            g.setColour (act ? col.withAlpha (0.22f).overlaidWith (juce::Colour (0xff1d1c1a).withAlpha (0.55f)) : juce::Colour (0xff1d1c1a));
+            g.fillRoundedRectangle (r, 5.0f);
+            g.setColour (act ? col : kInk.withAlpha (0.3f));
+            g.drawRoundedRectangle (r, 5.0f, act ? 2.0f : 1.0f);
+            g.setColour (act ? kInk : kInk.withAlpha (0.45f));
+            g.setFont (juce::FontOptions (13.0f, juce::Font::bold).withKerningFactor (0.08f));
+            g.drawText (kFxNames[fx], r.reduced (30.0f, 0.0f).withTrimmedBottom (14.0f), juce::Justification::centred);
+            g.setFont (juce::FontOptions (8.0f, juce::Font::bold));
+            g.setColour (act ? col : kInk.withAlpha (0.35f));
+            g.drawText (act ? "ON" : "OFF", r.reduced (30.0f, 0.0f).withTrimmedTop (34.0f), juce::Justification::centred);
+            // move arrows
+            g.setColour (kInk.withAlpha (slot > 0 ? 0.8f : 0.15f));
+            juce::Path l; l.addTriangle (r.getX() + 10, r.getCentreY(), r.getX() + 20, r.getCentreY() - 7, r.getX() + 20, r.getCentreY() + 7);
+            g.fillPath (l);
+            g.setColour (kInk.withAlpha (slot < 3 ? 0.8f : 0.15f));
+            juce::Path rr; rr.addTriangle (r.getRight() - 10, r.getCentreY(), r.getRight() - 20, r.getCentreY() - 7, r.getRight() - 20, r.getCentreY() + 7);
+            g.fillPath (rr);
+        }
+    }
+
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (8.5f, juce::Font::bold));
+    g.drawText ("LINK ALL PARTS", 12, 474, 90, 12, juce::Justification::centred);
+    g.drawText ("RESET", 122, 474, 90, 12, juce::Justification::centred);
+    g.setColour (kInk.withAlpha (0.6f));
+    g.setFont (juce::FontOptions (9.5f));
+    g.drawFittedText ("A block shows ON when that effect is active for the part (STEP GATE on the ARP page, CHORUS and TAPE need their ON switch "
+                      "and part selector, FLANGER its part selector). Switching order fades the part out and back in over a few milliseconds, so it never clicks.\n"
+                      "TAPE LAST: wobble and saturation over everything (classic).   TAPE FIRST: the chorus and flanger sweep a wobbly, saturated tape sound.   "
+                      "GATE LAST: the gate also chops effect tails and tape hiss, for a harder rhythm.",
+                      240, 424, getWidth() - 270, 60, juce::Justification::centredLeft, 4);
+}
+
+//==============================================================================
 SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state)
 {
     const int W = TridexPanel::kW - 48, H = kLowerY - 40;
@@ -1718,7 +1875,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
 
     }
 
-    lcd = { 300, 9, 130, 24 };
+    lcd = { 298, 9, 112, 24 };
 
     // ---------------- ARP page toggle (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
@@ -1726,7 +1883,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     addChildComponent (*arpPage);
     {
         auto b = std::make_unique<tdxui::LedButton> ("ARP");
-        b->setBounds (lcd.getRight() + 14, 4, 30, 32);
+        b->setBounds (lcd.getRight() + 10, 4, 30, 32);
         b->setTooltip ("Show / hide the arpeggiator page");
         b->onClick = [this]
         {
@@ -1735,7 +1892,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         addAndMakeVisible (*b);
         arpBtn = b.get();
         owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 48, 13, 40, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 44, 13, 34, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
     }
 
     // ---------------- ABOUT page: click the I Rife logo (Tridex II)
@@ -1757,7 +1914,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     addChildComponent (*chorusPage);
     {
         auto b = std::make_unique<tdxui::LedButton> ("CHORUS");
-        b->setBounds (lcd.getRight() + 90, 4, 30, 32);
+        b->setBounds (lcd.getRight() + 80, 4, 30, 32);
         b->setTooltip ("Show / hide the chorus page");
         b->onClick = [this]
         {
@@ -1766,7 +1923,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         addAndMakeVisible (*b);
         chorusBtn = b.get();
         owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 124, 13, 60, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 114, 13, 56, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
     }
 
     // ---------------- TAPE page toggle (Tridex II)
@@ -1775,7 +1932,7 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
     addChildComponent (*tapePage);
     {
         auto b = std::make_unique<tdxui::LedButton> ("TAPE");
-        b->setBounds (lcd.getRight() + 190, 4, 30, 32);
+        b->setBounds (lcd.getRight() + 176, 4, 30, 32);
         b->setTooltip ("Show / hide the tape page");
         b->onClick = [this]
         {
@@ -1786,20 +1943,35 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         owned.push_back (std::move (b));
     }
 
+    // ---------------- FX ROUTING page toggle (Tridex II)
+    fxPage = std::make_unique<tdxui::FxPage> (proc.apvts);
+    fxPage->setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (*fxPage);
+    {
+        auto b = std::make_unique<tdxui::LedButton> ("FX");
+        b->setBounds (lcd.getRight() + 254, 4, 30, 32);
+        b->setTooltip ("Show / hide the FX routing page (effect order per part)");
+        b->onClick = [this] { togglePage (fxPage.get()); };
+        addAndMakeVisible (*b);
+        fxBtn = b.get();
+        owned.push_back (std::move (b));
+        text ({ (float) lcd.getRight() + 288, 13, 24, 14 }, "FX", 10.0f, true, juce::Justification::centredLeft);
+    }
+
     // ---------------- SETTINGS page toggle (Tridex II)
     settingsPage = std::make_unique<tdxui::SettingsPage> (proc.apvts);
     settingsPage->setBounds (24, 40, kW - 48, kLowerY - 40);
     addChildComponent (*settingsPage);
     {
         auto b = std::make_unique<tdxui::LedButton> ("SETTINGS");
-        b->setBounds (lcd.getRight() + 282, 4, 30, 32);
+        b->setBounds (lcd.getRight() + 316, 4, 30, 32);
         b->setTooltip ("Show / hide the settings page");
         b->onClick = [this] { togglePage (settingsPage.get()); };
         addAndMakeVisible (*b);
         settingsBtn = b.get();
         owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 316, 13, 70, 14 }, "SETTINGS", 10.0f, true, juce::Justification::centredLeft);
-        text ({ (float) lcd.getRight() + 224, 13, 44, 14 }, "TAPE", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 350, 13, 64, 14 }, "SETTINGS", 10.0f, true, juce::Justification::centredLeft);
+        text ({ (float) lcd.getRight() + 210, 13, 40, 14 }, "TAPE", 10.0f, true, juce::Justification::centredLeft);
     }
 
     // ---------------- Keyboard (61 keys, C-C)
@@ -1856,7 +2028,7 @@ void TridexPanel::togglePage (juce::Component* page)
     if (page == nullptr) return;
     const bool show = ! page->isVisible();
     for (juce::Component* c : { (juce::Component*) arpPage.get(), (juce::Component*) chorusPage.get(), (juce::Component*) tapePage.get(),
-                                (juce::Component*) aboutPage.get(), (juce::Component*) settingsPage.get() })
+                                (juce::Component*) aboutPage.get(), (juce::Component*) settingsPage.get(), (juce::Component*) fxPage.get() })
         if (c != nullptr) c->setVisible (false);
     page->setVisible (show);
     if (show) page->toFront (false);
@@ -1887,6 +2059,7 @@ void TridexPanel::timerCallback()
         const bool lit = lfoPanel->isVisible() || (used && proc.getLfoValue() > 0.0f);
         if (lfoBtn->lit != lit) { lfoBtn->lit = lit; lfoBtn->repaint(); }
     }
+    if (fxBtn && fxBtn->lit != fxPage->isVisible()) { fxBtn->lit = fxPage->isVisible(); fxBtn->repaint(); }
     if (settingsBtn && settingsBtn->lit != settingsPage->isVisible()) { settingsBtn->lit = settingsPage->isVisible(); settingsBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();

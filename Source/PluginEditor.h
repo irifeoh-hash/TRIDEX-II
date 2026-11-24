@@ -167,6 +167,25 @@ private:
     juce::Rectangle<int> scope;
 };
 
+// FX ROUTING page (Tridex II): each part's effect chain as blocks you reorder with the arrows.
+class FxPage : public juce::Component, private juce::Timer
+{
+public:
+    explicit FxPage (juce::AudioProcessorValueTreeState& state);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void visibilityChanged() override { if (isVisible()) startTimerHz (10); else stopTimer(); }
+
+private:
+    void timerCallback() override;
+    juce::Rectangle<float> blockRect (int lane, int slot) const;
+    bool fxActive (int lane, int fx) const;
+    void setOrder (int lane, int index);
+    juce::AudioProcessorValueTreeState& apvts;
+    std::unique_ptr<LedButton> link, reset;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> linkAtt;
+};
+
 // SETTINGS page (Tridex II): opened/closed with the SETTINGS button in the top bar.
 class SettingsPage : public juce::Component
 {
@@ -385,6 +404,8 @@ private:
     std::unique_ptr<tdxui::AboutPage> aboutPage;
     std::unique_ptr<tdxui::TapePage> tapePage;
     tdxui::LedButton* tapeBtn = nullptr;
+    std::unique_ptr<tdxui::FxPage> fxPage;
+    tdxui::LedButton* fxBtn = nullptr;
     std::unique_ptr<tdxui::SettingsPage> settingsPage;
     tdxui::LedButton* settingsBtn = nullptr;
     void togglePage (juce::Component* page);

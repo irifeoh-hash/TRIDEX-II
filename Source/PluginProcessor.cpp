@@ -119,6 +119,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "polyphony",  "Polyphony", { "8 Voices (Classic)", "16 Voices" }, 0);
     addC (l, "quality",    "Quality", { "Normal", "Eco" }, 0);
 
+    // ---- FX routing (Tridex II): effect order per part, optionally linked
+    {
+        juce::StringArray orders;
+        static const char* fxName[] = { "GATE", "CHORUS", "FLANGER", "TAPE" };
+        for (const auto& o : tdx::fxOrders())
+            orders.add (juce::String (fxName[o[0]]) + " > " + fxName[o[1]] + " > " + fxName[o[2]] + " > " + fxName[o[3]]);
+        addC (l, "fx_order_syn", "FX Order Synthe", orders, 0);
+        addC (l, "fx_order_br",  "FX Order Brass", orders, 0);
+        addC (l, "fx_order_st",  "FX Order Strings", orders, 0);
+        addB (l, "fx_link",      "FX Order Link", true);
+    }
+
     // ---- Assignable LFO (Tridex II): one LFO, two destinations with their own amounts
     addC (l, "lfo_wave",   "LFO Wave", { "Sine", "Triangle", "Saw Up", "Saw Down", "Square", "S&H", "Random" }, 1);
     { NR r (0.02f, 30.0f); r.setSkewForCentre (2.0f); addF (l, "lfo_rate", "LFO Rate", r, 2.0f, "Hz"); }
@@ -335,6 +347,7 @@ void TridexProcessor::syncParams()
     p.lfo.wave = idx ("lfo_wave"); p.lfo.rateHz = get ("lfo_rate"); p.lfo.sync = idx ("lfo_sync");
     p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
     p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
+    p.fxOrder = { idx ("fx_order_syn"), idx ("fx_order_br"), idx ("fx_order_st") };
     p.lfo.wheelMode = idx ("mw_mode"); p.lfo.wheel = midiVib;
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");

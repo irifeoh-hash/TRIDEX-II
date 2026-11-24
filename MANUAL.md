@@ -83,6 +83,7 @@ A red LED on a switch means it is on.
 | **ARP** | Opens or closes the ARP page (arpeggiators and step gates). |
 | **CHORUS** | Opens or closes the CHORUS page. |
 | **TAPE** | Opens or closes the TAPE page. |
+| **FX** | Opens or closes the FX ROUTING page (see below). |
 | **SETTINGS** | Opens or closes the SETTINGS page (see below). |
 | **Priority** | Note priority for the mono modes: **Last**, **First**, **Low** or **High**. It decides which held note a mono part plays. |
 | **BEND** | Pitch-bend range for the joystick and MIDI pitch bend, 0–12 semitones. |
@@ -90,7 +91,21 @@ A red LED on a switch means it is on.
 | **VELO** | Velocity sensitivity. The original had none, so 0 plays like the hardware. |
 | **Pedal** | Sustain pedal (CC64) behaviour: **Off**; **Damper (S-1)**, a Trident-style release switch that works with AUTO DAMP; or **Hold**, a normal sustain pedal. |
 
-Only one pop-up page (ARP, CHORUS, TAPE, SETTINGS or About) is open at a time. The button for the open page is lit.
+Only one pop-up page (ARP, CHORUS, TAPE, FX, SETTINGS or About) is open at a time. The button for the open page is lit.
+
+### FX ROUTING page
+Each part (SYNTHE, BRASS, STRINGS) has a lane showing its effect chain: **GATE → CHORUS → FLANGER → TAPE** (the classic order).
+
+- **Moving blocks:** click the **◀ ▶** arrows on a block to move it left or right.
+- **ON / OFF:** a block reads **ON** and lights in the part colour when that effect is active for that part.
+- **LINK ALL PARTS** (on by default): moving a block in one lane moves it in all three. Turn it off to give each part its own order. Turning it back on copies the SYNTHE order to the others.
+- **RESET:** returns every lane to the classic order.
+- **No clicks:** changing the order while sound is playing fades the part out and back in over a few milliseconds.
+
+The order matters most with TAPE and GATE:
+- **TAPE last:** wobble and saturation over everything.
+- **TAPE first:** the chorus and flanger sweep over a wobbly, saturated tape sound.
+- **GATE last:** the gate also chops the effect tails and tape hiss, for a harder rhythm.
 
 ### SETTINGS page
 Settings are saved with your project.
@@ -401,7 +416,7 @@ sways by about a semitone.
                  ┌─ SYNTHESIZER ─ step gate ─ CHORUS ─ FLANGER ─ TAPE ─┐
 keys ─ arps ─────┼─ BRASS ─────── step gate ─ CHORUS ─ FLANGER ─ TAPE ─┼─ TOTAL VOLUME ─ outputs
                  └─ STRINGS ───── step gate ─ CHORUS ─ FLANGER ─ TAPE ─┘
-                                (each effect only applies to the parts selected on it)
+                                (each effect only applies to the parts selected on it; the order per part is set on the FX page)
 ```
 
 The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. Each part is also sent to its own output (see section 17).
