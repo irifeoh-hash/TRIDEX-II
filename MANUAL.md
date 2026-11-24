@@ -250,7 +250,6 @@ whole section shares one filter and one envelope (paraphonic), which gives the c
 | **CUTOFF FREQ / RESONANCE** | Brass filter. |
 | **EG INTENSITY** | How much the EG opens the filter. |
 | **ATTACK / DECAY / SUSTAIN / RELEASE** | Brass envelope, for both the filter and the volume. |
-| **POLY VCF** | Gives each note its own filter instead of one shared filter. |
 | **SILENCE NOTE (2/4/6/8)** | Used with **TRIGGER SELECT**. The envelope only starts once this many keys are held. |
 | **TRIGGER SELECT** | Turns on the SILENCE NOTE threshold. |
 | **MULTIPLE TRIGGER** | Restarts the shared envelope on every new key, instead of only on the first key of a phrase. |
@@ -258,7 +257,7 @@ whole section shares one filter and one envelope (paraphonic), which gives the c
 ### VOICING, GLIDE and MONO
 | Control | What it does |
 |---|---|
-| **PARA / POLY** | **PARA** is the original paraphonic brass, with one filter and envelope for the section. **POLY** is true polyphonic brass: each note has its own filter and envelope, like a normal poly synth. |
+| **VOICING** (red display) | **PARA** is the original paraphonic brass: one filter and one envelope for the whole section. **PARA+VCF** gives each note its own filter (with half keyboard tracking), all swept by the one shared envelope. That keeps the paraphonic swell, with cleaner chords and brighter high notes. **POLY** is fully polyphonic: each note has its own filter and envelope. Click the display, or use the arrows. Older projects are converted automatically. |
 | **GLIDE TIME** and **PORTA / GLISS** | Same as on the synth. |
 | **MONO** and **RETRIG / LEGATO** | True monophonic brass, same behaviour as on the synth. Uses NOTE PRIORITY on the SETTINGS page. |
 
@@ -279,7 +278,7 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | **DELAY TIME / INTENSITY / SPEED** (VIBRATO) | Vibrato that fades in after the delay time. **VIBRATO OFF** turns it off. |
 | **KBD BALANCE** | Tilts the level between the low and high ends of the keyboard. |
 | **CUTOFF FREQ / RESONANCE** (VCF) | Strings tone filter. |
-| **16' / 8' / 4'** (cream) | String footages. Combine them freely. |
+| **16' / 8' / 4'** (cream) + level knobs | String footages, which you can combine freely. The small knob under each button sets that footage's level, so you can balance them, for example a little 4' sparkle over a full 8'. |
 | **ENSEMBLE OFF** | Turns off the built-in string ensemble (the lush chorus) for a drier, thinner sound. |
 | **DIVIDE DOWN** | Phase-locked string-machine mode. With it on, every strings note is divided down from one shared top-octave bank, as in classic string machines, instead of using its voice's own oscillator. All octaves of a note are then locked together, so stacked octaves fuse into one clean, solid tone with no beating. DRIFT then detunes each note name (every C together) instead of each voice. Gliding notes, between semitones, keep their own oscillator. Switching is crossfaded, so it doesn't click. |
 | **VOLUME / OUTPUT / OCTAVE ▲▼** | Part level, part on/off, and ±2 octaves (orange display). |

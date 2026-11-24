@@ -115,6 +115,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    std::array<float, 3> stLevel { 1.0f, 1.0f, 1.0f };  // Tridex II: strings 16' / 8' / 4' levels
     bool stDivide = false;                              // Tridex II: strings DIVIDE-DOWN (phase-locked top-octave bank)
     std::array<int, 3> fxOrder { 0, 0, 0 };            // Tridex II: effect order per part (index into fxOrders())
     LfoParams lfo;                                      // Tridex II: assignable LFO
@@ -523,11 +524,12 @@ public:
         {
             // Volume controls are smoothed per sample (~1.5 ms): automation and LFO tremolo never step.
             {
-                const float tv[4] = { p.master, p.synVolume, p.brVolume, p.stVolume };
-                for (int k = 0; k < 4; ++k)
+                const float tv[7] = { p.master, p.synVolume, p.brVolume, p.stVolume, p.stLevel[0], p.stLevel[1], p.stLevel[2] };
+                for (int k = 0; k < 7; ++k)
                     volS[k] = volS[k] < 0.0f ? tv[k] : volS[k] + (tv[k] - volS[k]) * volSmooth;
             }
             const float gMaster = volS[0], gSyn = volS[1], gBr = volS[2], gSt = volS[3];
+            const float lv16 = volS[4], lv8 = volS[5], lv4 = volS[6];
             // ---- Arpeggiators (one per section)
             for (int s = 0; s < 3; ++s)
             {
@@ -659,7 +661,7 @@ public:
                 if (v.stEnv.isActive())
                 {
                     const float e = v.stEnv.process();
-                    float raw = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * stMixNorm;
+                    float raw = ((p.st16 ? o1.saw16 * lv16 : 0.0f) + (p.st8 ? o1.saw8 * lv8 : 0.0f) + (p.st4 ? o1.saw4 * lv4 : 0.0f)) * stMixNorm;
                     // DIVIDE-DOWN: take this note from the shared bank (crossfaded ~10 ms, so the switch never clicks).
                     // Gliding notes (between semitones) and notes above the bank keep their own oscillator.
                     {
@@ -675,7 +677,7 @@ public:
                             const double scale = std::ldexp (1.0, -k16);
                             double ph = ddCycles[(size_t) c] * scale; ph -= std::floor (ph);
                             const auto od = DividerVco::derive (ph, ddDt[(size_t) c] * scale, v.vco1.mis8, v.vco1.mis16);
-                            const float rawDd = ((p.st16 ? od.saw16 : 0.0f) + (p.st8 ? od.saw8 : 0.0f) + (p.st4 ? od.saw4 : 0.0f)) * stMixNorm;
+                            const float rawDd = ((p.st16 ? od.saw16 * lv16 : 0.0f) + (p.st8 ? od.saw8 * lv8 : 0.0f) + (p.st4 ? od.saw4 * lv4 : 0.0f)) * stMixNorm;
                             raw += (rawDd - raw) * v.ddMix;
                         }
                     }
@@ -1305,7 +1307,7 @@ private:
     std::array<float, 12> ddDriftCents {};             // per note name: every C drifts together
     std::array<int, 3> fxCur { 0, 0, 0 };              // effect order currently running per part
     std::array<float, 3> fxDuck { 1.0f, 1.0f, 1.0f };  // gain while switching order
-    float volS[4] { -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume
+    float volS[7] { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume, strings footage levels
     OnePoleLP stSmoothL1, stSmoothL2, stSmoothR1, stSmoothR2;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;

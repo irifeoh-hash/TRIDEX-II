@@ -198,8 +198,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "br_tsel",   "Trigger Select", false);
     addB (l, "br_mono",   "Brass Mono", false);
     addB (l, "br_legato", "Brass Legato", true);
-    addB (l, "br_polyvcf","Brass Poly VCF", false);
-    addB (l, "br_poly",   "Brass Polyphonic", false);   // switch: PARA (off) / POLY (on)
+    addB (l, "br_polyvcf","Brass Poly VCF", false);     // legacy: replaced by br_voicing (kept so older projects load)
+    addB (l, "br_poly",   "Brass Polyphonic", false);   // legacy: replaced by br_voicing
+    addC (l, "br_voicing","Brass Voicing", { "PARA", "PARA+VCF", "POLY" }, 0);   // PARA (original) / own filter per note / fully poly
     { NR g (0.0f, 2.0f); g.setSkewForCentre (0.3f); addF (l, "br_glide", "Brass Glide Time", g, 0.0f, "s"); }
     addB (l, "br_gliss",  "Brass Glissando", false);
     addC (l, "br_silence","Silence Note", { "2", "4", "6", "8" }, 0);
@@ -211,6 +212,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addB (l, "st_16",      "Strings 16'", false);
     addB (l, "st_8",       "Strings 8'", true);
     addB (l, "st_4",       "Strings 4'", true);
+    addF (l, "st_lvl16",   "Strings 16' Level", unit, 1.0f);   // Tridex II: level per footage
+    addF (l, "st_lvl8",    "Strings 8' Level", unit, 1.0f);
+    addF (l, "st_lvl4",    "Strings 4' Level", unit, 1.0f);
     addF (l, "st_attack",  "Strings Attack",  timeRange (15.0f), 0.15f, "s");
     addF (l, "st_release", "Strings Release", timeRange (15.0f), 0.8f, "s");
     addF (l, "st_balance", "KBD Balance", unit, 0.0f);
@@ -348,6 +352,7 @@ void TridexProcessor::syncParams()
     p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
     p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
     p.stDivide = on ("st_divide");
+    p.stLevel = { get ("st_lvl16"), get ("st_lvl8"), get ("st_lvl4") };
     p.fxOrder = { idx ("fx_order_syn"), idx ("fx_order_br"), idx ("fx_order_st") };
     p.lfo.wheelMode = idx ("mw_mode"); p.lfo.wheel = midiVib;
 
@@ -365,7 +370,7 @@ void TridexProcessor::syncParams()
     p.br2Scale = idx ("br2_oct"); p.br2Wave = idx ("br2_wave"); p.br2Detune = get ("br2_detune"); p.brOscMix = get ("br_oscmix");
     p.brCutoff = get ("br_cutoff"); p.brRes = get ("br_res"); p.brEgInt = get ("br_egint");
     p.brA = get ("br_a"); p.brD = get ("br_d"); p.brS = get ("br_s"); p.brR = get ("br_r");
-    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); p.brPolyVcf = on ("br_polyvcf"); p.brPoly = on ("br_poly");
+    p.multiTrig = on ("br_multi"); p.trigSelect = on ("br_tsel"); p.brMono = on ("br_mono"); { const int vo = idx ("br_voicing"); p.brPolyVcf = vo == 1; p.brPoly = vo == 2; }
     p.synMono = on ("syn_mono"); p.synLegato = on ("syn_legato"); p.brLegato = on ("br_legato");
     p.synGlide = get ("syn_glide"); p.synGliss = on ("syn_gliss");
     p.brGlide = get ("br_glide"); p.brGliss = on ("br_gliss"); p.silenceNote = idx ("br_silence");
@@ -552,7 +557,17 @@ void TridexProcessor::setStateInformation (const void* data, int sizeInBytes)
         }
         state.removeChild (progs, nullptr);
     }
+    // Older projects stored brass voicing as two switches (POLY, POLY VCF); map them onto VOICING.
+    int legacyVoicing = -1;
+    if (! state.getChildWithProperty ("id", "br_voicing").isValid())
+    {
+        const auto val = [&state] (const char* id) { auto c = state.getChildWithProperty ("id", id); return c.isValid() && (float) c.getProperty ("value", 0.0f) > 0.5f; };
+        legacyVoicing = val ("br_poly") ? 2 : (val ("br_polyvcf") ? 1 : 0);
+    }
     apvts.replaceState (state);
+    if (legacyVoicing >= 0)
+        if (auto* prm = apvts.getParameter ("br_voicing"))
+            prm->setValueNotifyingHost (prm->convertTo0to1 ((float) legacyVoicing));
 }
 
 juce::AudioProcessorEditor* TridexProcessor::createEditor() { return new TridexEditor (*this); }

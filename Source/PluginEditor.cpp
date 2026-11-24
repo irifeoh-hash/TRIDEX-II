@@ -36,9 +36,9 @@ constexpr int kHeadY = 42;               // section header bars (top)
 constexpr int kRow1 = 98, kRow2 = 170;   // knob centre rows
 constexpr int kModY = 210;               // module names
 constexpr int kSwY = 226;                // switch strip top
-constexpr int kBarY = 288;               // section name bars (bottom of the switch tier)
-constexpr int kTier = 270;               // second row of sections sits this far below the first
-constexpr int kLowerY = 312 + kTier;     // joystick / keyboard area
+constexpr int kBarY = 302;               // section name bars (bottom of the switch tier)
+constexpr int kTier = 284;               // second row of sections sits this far below the first
+constexpr int kLowerY = kBarY + 24 + kTier;   // joystick / keyboard area
 constexpr int kRail = 10;                // wooden rail under the keys
 constexpr int kKeysX = 312;              // keyboard starts here
 constexpr int kStrip = 26;               // split-indicator strip above the keys
@@ -1772,9 +1772,18 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("br_tsel", bx += 42, (kSwY + kTier), "TRIGGER SELECT");
         octave ("br_octsh", bx += 46, (kSwY + kTier));
         // Tridex II: per-note brass filter switch
-        led ("br_polyvcf", col (7), (kRow1 + kTier) - 22, "POLY VCF");
         moduleLabel ((float) s0 + 7 * kCol, (float) s0 + 8 * kCol, (kModY + kTier), "VOICING");
-        modeSwitch ("br_poly", col (7), (kRow2 + kTier), false, "PARA", "POLY");
+        {
+            // VOICING (Tridex II): PARA (original, one shared filter + EG) / PARA+VCF (own filter per note) / POLY
+            auto vs = std::make_unique<tdxui::ChoiceScreen> (*proc.apvts.getParameter ("br_voicing"));
+            vs->fontSize = 9.5f;
+            vs->setBounds (col (7) - 32, (kRow2 + kTier) - 12, 64, 22);
+            vs->setTooltip ("Brass voicing: PARA = one filter + envelope for the section (original) / "
+                            "PARA+VCF = own filter per note, shared envelope / POLY = own filter + envelope per note");
+            addAndMakeVisible (*vs);
+            owned.push_back (std::move (vs));
+            text ({ (float) col (7) - 33, (float) (kRow2 + kTier) + 12, 66, 11 }, "PARA / +VCF / POLY", 7.0f, false, juce::Justification::centred);
+        }
         // Tridex II: glide (portamento / glissando)
         knob ("br_glide", col (8), (kRow1 + kTier), "GLIDE TIME", false);
         modeSwitch ("br_gliss", col (8), (kRow2 + kTier), false);
@@ -1813,9 +1822,17 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         knob ("st_vol", s0 + 20, (kSwY + kTier) + 18, "VOLUME", false, 30);
         int bx = s0 + 54;
         led ("st_on", bx, (kSwY + kTier), "OUTPUT");
-        led ("st_16", bx += 38, (kSwY + kTier), "16'");
-        led ("st_8", bx += 34, (kSwY + kTier), "8'");
-        led ("st_4", bx += 34, (kSwY + kTier), "4'");
+        // Footages, each with a small level knob underneath (Tridex II)
+        {
+            const char* feet[] = { "st_16", "st_8", "st_4" };
+            const char* lvls[] = { "st_lvl16", "st_lvl8", "st_lvl4" };
+            const char* names[] = { "16'", "8'", "4'" };
+            for (int k = 0; k < 3; ++k)
+            {
+                led (feet[k], bx += (k == 0 ? 38 : 34), (kSwY + kTier), names[k]);
+                knob (lvls[k], bx, (kSwY + kTier) + 63, "", false, 21).setTooltip (juce::String ("Strings ") + names[k] + " level");
+            }
+        }
         led ("bow_on", bx += 38, (kSwY + kTier), "BOWING");
         led ("svib_off", bx += 36, (kSwY + kTier), "VIBRATO\nOFF");
         led ("ens_off", bx += 36, (kSwY + kTier), "ENSEMBLE\nOFF");
