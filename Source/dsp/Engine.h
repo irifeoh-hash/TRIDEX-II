@@ -74,7 +74,7 @@ struct Params
 {
     // ---- Total control
     float master = 0.8f, tuneCents = 0.0f;
-    int splitPoint = 60, assignMode = 0;                // 0 = Mode 1, 1 = Mode 2
+    int assignMode = 0;                                 // 0 = Mode 1, 1 = Mode 2
     std::array<int, 3> splits { 60, 60, 60 };           // Tridex II: split point per part (Synth, Brass, Strings)
     float mgSpeed = 5.5f, mgIntensity = 0.5f;           // joystick vibrato/trill
     bool delayVib = false; float delayVibInt = 0.3f;     // delay time is fixed on the hardware

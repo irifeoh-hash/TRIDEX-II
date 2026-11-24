@@ -103,7 +103,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "tp_mix",     "Tape Mix", unit, 1.0f);
 
     // ---- Plugin extras (not on the hardware panel)
-    addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // legacy (unused): per-part splits below
+    addF (l, "split",      "Split Point", NR (36.0f, 96.0f, 1.0f), 60.0f);   // legacy, no longer used (per-part splits below); kept so older projects load cleanly
     addF (l, "syn_split",  "Synthe Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
     addF (l, "br_split",   "Brass Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
     addF (l, "st_split",   "Strings Split Point", NR (24.0f, 108.0f, 1.0f), 60.0f);
@@ -341,7 +341,6 @@ void TridexProcessor::syncParams()
     p.chOn = on ("ch_on"); p.chSynth = on ("ch_syn"); p.chBrass = on ("ch_br"); p.chStrings = on ("ch_st");
     p.chMode = idx ("ch_mode"); p.chSpace = idx ("ch_space"); p.chWidth = get ("ch_width"); p.chTone = get ("ch_tone"); p.chRate = get ("ch_rate"); p.chDepth = get ("ch_depth"); p.chMix = get ("ch_mix");
     p.flManual = get ("fl_manual"); p.flIntensity = get ("fl_int"); p.flFeedback = get ("fl_fb"); p.flSpeed = get ("fl_speed");
-    p.splitPoint = idx ("split");
     p.splits = { juce::roundToInt (get ("syn_split")), juce::roundToInt (get ("br_split")), juce::roundToInt (get ("st_split")) }; p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));
     p.octShift = { juce::roundToInt (get ("syn_octsh")), juce::roundToInt (get ("br_octsh")), juce::roundToInt (get ("st_octsh")) }; p.drift = get ("drift");
     p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode"); p.notePriority = idx ("note_prio"); p.numVoices = idx ("polyphony") == 1 ? 16 : 8; p.ecoQuality = idx ("quality") == 1;

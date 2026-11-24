@@ -39,37 +39,6 @@ struct Rng
 };
 
 //==============================================================================
-enum class Wave { Saw = 0, Square, Pulse };
-
-// PolyBLEP VCO. Phase is kept in [0,1).
-struct Vco
-{
-    double phase = 0.0;
-
-    float process (double inc, Wave w, float pw)
-    {
-        inc = std::min (inc, 0.49);
-        float out;
-        if (w == Wave::Saw)
-        {
-            out = float (2.0 * phase - 1.0) - polyBlep (phase, inc);
-        }
-        else
-        {
-            const double p = (w == Wave::Square) ? 0.5 : std::clamp ((double) pw, 0.05, 0.95);
-            out = phase < p ? 1.0f : -1.0f;
-            out += polyBlep (phase, inc);
-            double t2 = phase - p;
-            if (t2 < 0.0) t2 += 1.0;
-            out -= polyBlep (t2, inc);
-        }
-        phase += inc;
-        if (phase >= 1.0) phase -= 1.0;
-        return out;
-    }
-};
-
-//==============================================================================
 // RC-style ADSR: exponential segments like a capacitor charging through a
 // resistor. Attack aims past 1.0 (overshoot target) and stops at 1.0, which
 // gives the characteristic analog "convex" attack.

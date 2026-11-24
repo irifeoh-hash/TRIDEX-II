@@ -10,17 +10,12 @@ const juce::Colour kPanel2    { 0xff302f2c };
 const juce::Colour kLid       { 0xff1f1e1c };
 const juce::Colour kWood      { 0xff3e1d0f };
 const juce::Colour kInk       { 0xffffffff };
-const juce::Colour kOrange    { 0xffe8893a };
-const juce::Colour kSynText   { 0xffffffff };   // legends: all white
 const juce::Colour kHeader    { 0xff5b5953 };
 const juce::Colour kHeaderInk { 0xffffffff };
 const juce::Colour kCapGrey   { 0xffb7b5ae };
 const juce::Colour kCapCream  { 0xffece8db };
-const juce::Colour kCapGreen  { 0xffa9c23c };
 const juce::Colour kCapBlue   { 0xff4f8fd8 };   // non-part on/off switches (OUTPUT, effect ON)
-const juce::Colour kCapOrange { 0xffeb8a34 };
-const juce::Colour kCapRed    { 0xffcf3426 };
-const juce::Colour kCapYellow { 0xfff4f2ec };   // programmer (white caps)
+const juce::Colour kCapWhite  { 0xfff4f2ec };   // programmer
 const juce::Colour kCapTan    { 0xff6e4a30 };
 // Part colours for the split indicators: SYNTHE green, BRASS red, STRINGS orange.
 const juce::Colour kPartCol[3] = { juce::Colour (0xff5bd34f), juce::Colour (0xffff3b2c), juce::Colour (0xffff9a2e) };
@@ -135,7 +130,7 @@ void LedButton::paintButton (juce::Graphics& g, bool over, bool down)
     const bool on = getClickingTogglesState() ? getToggleState() : lit;
     const auto cap = b.reduced (5.0f, 1.5f);
 
-    const auto base = redCap ? kCapRed : this->cap;
+    const auto base = this->cap;
     g.setColour (juce::Colours::black.withAlpha (0.6f));
     g.fillRoundedRectangle (cap.translated (0.0f, 1.5f).expanded (1.0f), 2.5f);
     g.setGradientFill (juce::ColourGradient (base.brighter (over ? 0.12f : 0.0f), cap.getX(), cap.getY(),
@@ -1519,7 +1514,7 @@ juce::Slider& TridexPanel::knob (const char* id, int cx, int cy, const juce::Str
     addAndMakeVisible (*s);
     sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, id, *s));
     if (label.isNotEmpty())
-        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f, false, juce::Justification::centred, white ? kSynText : juce::Colour());
+        text ({ (float) cx - 30, (float) (cy + box / 2 - 4), 60, 11 }, label, 8.5f, false, juce::Justification::centred, white ? kInk : juce::Colour());
     auto& ref = *s;
     owned.push_back (std::move (s));
     return ref;
@@ -1568,27 +1563,12 @@ tdxui::LedButton& TridexPanel::progButton (const juce::String& label, int cx, in
 {
     auto b = std::make_unique<tdxui::LedButton> (label);
     b->setBounds (cx - 14, y, 28, 36);
-    b->cap = kCapYellow;
+    b->cap = kCapWhite;
     b->onClick = std::move (onClick);
     addAndMakeVisible (*b);
     text ({ (float) cx - 20, (float) y + 38, 40, 10 }, label, 8.0f, true);
     auto& ref = *b;
     owned.push_back (std::move (b));
-    return ref;
-}
-
-juce::ComboBox& TridexPanel::combo (const char* id, int x, int y, int w)
-{
-    auto c = std::make_unique<juce::ComboBox>();
-    auto* choice = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id));
-    jassert (choice != nullptr);
-    c->addItemList (choice->choices, 1);
-    c->setBounds (x, y, w, 22);
-    c->setTooltip (choice->getName (64));
-    addAndMakeVisible (*c);
-    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, id, *c));
-    auto& ref = *c;
-    owned.push_back (std::move (c));
     return ref;
 }
 
@@ -1606,7 +1586,7 @@ void TridexPanel::octave (const char* id, int cx, int y)
 void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend, const juce::String& left, const juce::String& right)
 {
     auto sw = std::make_unique<tdxui::ModeSwitch>();
-    sw->accent = orangeLegend ? kSynText : kInk;
+    sw->accent = orangeLegend ? kInk : kInk;
     sw->leftLabel = left; sw->rightLabel = right;
     sw->setBounds (cx - 28, cy - 18, 56, 30);
     sw->setTooltip (left == "PORTA" ? "Glide mode: PORTA (smooth slide) / GLISS (semitone steps)"
@@ -1615,7 +1595,7 @@ void TridexPanel::modeSwitch (const char* id, int cx, int cy, bool orangeLegend,
     addAndMakeVisible (*sw);
     bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, id, *sw));
     owned.push_back (std::move (sw));
-    text ({ (float) cx - 27, (float) cy + 16, 54, 11 }, left + " / " + right, 7.0f, false, juce::Justification::centred, orangeLegend ? kSynText : juce::Colour());
+    text ({ (float) cx - 27, (float) cy + 16, 54, 11 }, left + " / " + right, 7.0f, false, juce::Justification::centred, orangeLegend ? kInk : juce::Colour());
 }
 
 void TridexPanel::text (juce::Rectangle<float> r, const juce::String& s, float size, bool bold, juce::Justification j, juce::Colour col)
@@ -1701,19 +1681,19 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         switchKnob ("v1_wave", col (1), kRow1, "WAVEFORM", true);
         knob ("pw_int", col (0), kRow2, "PW/PWM", true);
         knob ("pwm_speed", col (1), kRow2, "PWM SPEED", true);
-        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1", kSynText);
+        moduleLabel ((float) s0, (float) s0 + 2 * kCol, kModY, "VCO 1", kInk);
 
         switchKnob ("v2_scale", col (2), kRow1, "OCTAVE", true);
         switchKnob ("v2_wave", col (3), kRow1, "WAVEFORM", true);
         knob ("v2_detune", col (2), kRow2, "DETUNE", true);
         knob ("vco_mix", col (3), kRow2, "VCO MIX", true);
-        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kSynText);
+        moduleLabel ((float) s0 + 2 * kCol, (float) s0 + 4 * kCol, kModY, "VCO 2", kInk);
 
         knob ("cutoff", col (4), kRow1, "CUTOFF FREQ", true);
         knob ("res", col (5), kRow1, "RESONANCE", true);
         switchKnob ("kbd_track", col (4), kRow2, "KBD TRACK", true);
         knob ("eg_int", col (5), kRow2, "EG INTENSITY", true);
-        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF", kSynText);
+        moduleLabel ((float) s0 + 4 * kCol, (float) s0 + 6 * kCol, kModY, "VCF", kInk);
 
         const char* fe[] = { "sf_a", "sf_d", "sf_s", "sf_r" };
         const char* ae[] = { "sa_a", "sa_d", "sa_s", "sa_r" };
@@ -1723,20 +1703,20 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
             knob (fe[i], col (6 + i), kRow1, nm[i], true);
             knob (ae[i], col (6 + i), kRow2, nm[i], true);
         }
-        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true, juce::Justification::centred, kSynText);
-        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG", kSynText);
+        text ({ (float) s0 + 6 * kCol, (float) kRow1 - 41, 4.0f * kCol, 11 }, "VCF EG", 9.5f, true, juce::Justification::centred, kInk);
+        moduleLabel ((float) s0 + 6 * kCol, (float) s0 + 10 * kCol, kModY, "VCA EG", kInk);
 
         knob ("vca_att", col (10), kRow1, "ATTENUATOR", true);
         led ("auto_damp", col (10), kRow2 - 22, "AUTO DAMP");
-        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kSynText);
+        moduleLabel ((float) s0 + 10 * kCol, (float) s0 + 11 * kCol, kModY, "VCA", kInk);
         // Tridex II: glide (portamento / glissando)
         knob ("syn_glide", col (11), kRow1, "GLIDE TIME", true);
         modeSwitch ("syn_gliss", col (11), kRow2, true);
         // Tridex II: MONO column (MONO on/off + RETRIG / LEGATO)
         led ("syn_mono", col (12), kRow1 - 22, "MONO");
         modeSwitch ("syn_legato", col (12), kRow2, true, "RETRIG", "LEGATO");
-        moduleLabel ((float) s0 + 12 * kCol, (float) s0 + 13 * kCol, kModY, "MONO", kSynText);
-        moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kSynText);
+        moduleLabel ((float) s0 + 12 * kCol, (float) s0 + 13 * kCol, kModY, "MONO", kInk);
+        moduleLabel ((float) s0 + 11 * kCol, (float) s0 + 12 * kCol, kModY, "GLIDE", kInk);
 
         // Programmer strip: WRITE  MANUAL | A B C D | 1..8, then MIXER
         int bx = s0 + 16;

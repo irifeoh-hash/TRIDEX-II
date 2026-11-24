@@ -76,15 +76,6 @@ target_link_libraries(Tridex80
     PRIVATE juce::juce_audio_utils TridexAssets
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
-# MinGW cross builds: MSVC's #pragma comment(lib) is ignored, so name the Windows libraries explicitly.
-if(MINGW)
-    target_link_libraries(Tridex80 PRIVATE
-        winmm shlwapi version ws2_32 wininet ole32 oleaut32 uuid imm32 comdlg32 gdi32 user32 shell32
-        dwrite d2d1 d3d11 dxgi dxguid uxtheme comctl32 setupapi crypt32 rpcrt4 advapi32 kernel32 dbghelp
-        dcomp dwmapi sapi ksuser ksguid)
-    target_sources(Tridex80 PRIVATE Source/win/MinGWCompat.cpp)
-endif()
-
 # Headless DSP render test (no JUCE dependency)
 add_executable(render_test tests/render_test.cpp)
 target_include_directories(render_test PRIVATE Source)

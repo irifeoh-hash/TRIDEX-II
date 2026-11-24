@@ -26,7 +26,6 @@ class LedButton : public juce::Button
 public:
     explicit LedButton (const juce::String& name) : juce::Button (name) {}
     bool lit = false;            // used when not a toggle (programmer buttons)
-    bool redCap = false;         // WRITE button
     juce::Colour cap { 0xffb7b5ae };   // cap colour (grey, cream, green, orange, tan...)
     void paintButton (juce::Graphics&, bool over, bool down) override;
 };
@@ -380,7 +379,6 @@ private:
     tdxui::LedButton& led (const char* id, int cx, int y, const juce::String& label);
     void octave (const char* id, int cx, int y);
     void modeSwitch (const char* id, int cx, int cy, bool orangeLegend, const juce::String& left = "PORTA", const juce::String& right = "GLISS");
-    juce::ComboBox& combo (const char* id, int x, int y, int w);
     tdxui::LedButton& progButton (const juce::String& label, int cx, int y, std::function<void()> onClick);
     void text (juce::Rectangle<float> r, const juce::String& s, float size = 9.5f, bool bold = false,
                juce::Justification j = juce::Justification::centred, juce::Colour col = {});
@@ -397,7 +395,6 @@ private:
     std::vector<std::unique_ptr<juce::Component>> owned;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
     std::vector<Text> texts;
     std::vector<Bar> bars;
 
