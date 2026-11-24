@@ -43,6 +43,8 @@ struct LfoParams
     bool keyRetrig = false;       // restart the wave on the first key of a phrase
     std::array<int, 2> dest { 0, 0 };
     std::array<float, 2> amount { 0.0f, 0.0f };   // -1..1
+    int wheelMode = 0;            // MOD WHEEL: 0 Vibrato (not the LFO), 1 LFO depth (both), 2 LFO 1 depth, 3 LFO 2 depth, 4 LFO rate
+    float wheel = 0.0f;           // mod wheel position 0..1
 };
 // Beats (quarter notes) per LFO cycle for the sync choices 1..11: 1/1 1/2 1/4 1/8 1/16 1/32 1/4D 1/8D 1/4T 1/8T 1/16T
 inline constexpr double kLfoSyncBeats[] = { 0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125, 1.5, 0.75, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
@@ -352,6 +354,7 @@ private:
     void advanceLfo (int n)
     {
         const auto& L = p.lfo;
+        lfoWheelS += (std::clamp (L.wheel, 0.0f, 1.0f) - lfoWheelS) * (1.0f - std::exp (-(float) n / (0.01f * sr)));   // ~10 ms
         if (lfoPhraseStart)
         {
             lfoPhraseStart = false;
@@ -366,7 +369,7 @@ private:
             if (hostPlaying && ! L.keyRetrig) newPhase = hostPpq / beats;
             else { lfoFreeBeats += hostBpm / 60.0 * n / sr; newPhase = lfoFreeBeats / beats; }
         }
-        else newPhase = lfoPhase + std::clamp (L.rateHz, 0.01f, 50.0f) * n / sr;
+        else newPhase = lfoPhase + std::clamp (L.rateHz, 0.01f, 50.0f) * (L.wheelMode == 4 ? 1.0f + 3.0f * lfoWheelS : 1.0f) * n / sr;
         newPhase -= std::floor (newPhase);
         if (newPhase < lfoPhase || ! lfoStarted) { lfoSh0 = lfoSh1; lfoSh1 = lfoRng.bipolar(); lfoStarted = true; }   // new cycle
         lfoPhase = newPhase;
@@ -387,7 +390,9 @@ private:
         for (int slot = 0; slot < 2; ++slot)
         {
             const int d = base.lfo.dest[(size_t) slot];
-            const float a = std::clamp (base.lfo.amount[(size_t) slot], -1.0f, 1.0f);
+            float a = std::clamp (base.lfo.amount[(size_t) slot], -1.0f, 1.0f);
+            const int wm = base.lfo.wheelMode;
+            if (wm == 1 || (wm == 2 && slot == 0) || (wm == 3 && slot == 1)) a *= lfoWheelS;   // wheel brings the LFO in
             if (d == kLfoOff || a == 0.0f) continue;
             const float v = lfoValue * lfoFadeEnv;   // -1..1
             const float m = a * v;
@@ -427,6 +432,7 @@ private:
     }
 
     double lfoPhase = 0.0, lfoFreeBeats = 0.0;
+    float lfoWheelS = 0.0f;
     float lfoValue = 0.0f, lfoFadeEnv = 1.0f, lfoSh0 = 0.0f, lfoSh1 = 0.0f, lfoPitchSemis = 0.0f;
     bool lfoPhraseStart = false, lfoStarted = false;
     Rng lfoRng { 0x3C6EF372u };

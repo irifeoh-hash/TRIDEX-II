@@ -299,6 +299,7 @@ Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for t
 | **Scope** | Shows the selected wave, with a dot at the LFO's current position. |
 | **DESTINATION 1 / 2** (red displays) | Two targets, each with its own **AMOUNT**. Click a display for a list grouped by section (Global, Synthesizer, Brass, Strings, Effects). |
 | **AMOUNT 1 / 2** | Bipolar: the centre does nothing, and turning left inverts the wave. Double-click a knob to reset it to the centre. |
+| **MOD WHEEL** (red display) | What the mod wheel (MIDI CC1) does. **VIBRATO** (default) is the classic wheel vibrato, the same as pushing the joystick up. **LFO DEPTH** fades in both LFO destinations, from 0 at the bottom of the wheel to your set AMOUNT at the top. **LFO 1 DEPTH** and **LFO 2 DEPTH** do the same for one slot only. **LFO RATE** speeds the LFO up, to as much as 4× its RATE. In the LFO modes the wheel stops adding vibrato; the on-screen joystick still does vibrato. |
 
 **Destinations:**
 - **Global:** PITCH, TOTAL VOLUME.
@@ -430,7 +431,7 @@ In other DAWs, enable the plugin's extra outputs in the track or instrument outp
 |---|---|
 | Notes | Play the instrument. Velocity only matters if **VELO** is above 0. |
 | Pitch bend | Joystick left/right |
-| CC1 (mod wheel) | Joystick up (vibrato) |
+| CC1 (mod wheel) | Vibrato (joystick up) by default, or LFO depth or rate. Set it with **MOD WHEEL** on the LFO panel. |
 | CC2 | Joystick down (trill) |
 | CC64 (sustain) | Pedal, as set by **Pedal** in the top bar |
 

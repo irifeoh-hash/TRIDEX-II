@@ -765,6 +765,7 @@ LfoPanel::LfoPanel (juce::AudioProcessorValueTreeState& state, std::function<flo
         screen (("lfo_dest" + n).toRawUTF8(), { 22, y, 190, 22 }, true, "LFO destination " + n + ": click for the list");
         knob ("lfo_amt" + n, { 232, y - 9, 40, 40 }, true).setTooltip ("Amount " + n + " (centre = none; double-click to reset)");
     }
+    screen ("mw_mode", { 86, 189, 126, 18 }, false, "What the MOD WHEEL (CC1) does: VIBRATO (classic) or bring in / speed up the LFO");
 }
 
 juce::Slider& LfoPanel::knob (const juce::String& id, juce::Rectangle<int> r, bool bipolar)
@@ -802,6 +803,8 @@ void LfoPanel::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
     g.drawText ("1", 6, 124, 14, 22, juce::Justification::centred);
     g.drawText ("2", 6, 162, 14, 22, juce::Justification::centred);
+    g.setFont (juce::FontOptions (8.0f, juce::Font::bold));
+    g.drawText ("MOD WHEEL", 20, 189, 64, 18, juce::Justification::centredLeft);
 
     // Scope: the selected wave with a dot at the current position
     const auto r = scope.toFloat();

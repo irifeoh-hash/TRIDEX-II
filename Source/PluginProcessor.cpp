@@ -125,6 +125,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "lfo_sync",   "LFO Sync", { "Off", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4D", "1/8D", "1/4T", "1/8T", "1/16T" }, 0);
     addF (l, "lfo_fade",   "LFO Fade In", NR (0.0f, 5.0f, 0.0f, 0.5f), 0.0f, "s");
     addB (l, "lfo_retrig", "LFO Key Retrig", false);
+    addC (l, "mw_mode",    "Mod Wheel", { "Vibrato", "LFO Depth", "LFO 1 Depth", "LFO 2 Depth", "LFO Rate" }, 0);
     for (int k = 1; k <= 2; ++k)
     {
         const juce::String n (k);
@@ -334,6 +335,7 @@ void TridexProcessor::syncParams()
     p.lfo.wave = idx ("lfo_wave"); p.lfo.rateHz = get ("lfo_rate"); p.lfo.sync = idx ("lfo_sync");
     p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
     p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
+    p.lfo.wheelMode = idx ("mw_mode"); p.lfo.wheel = midiVib;
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));
@@ -395,7 +397,7 @@ void TridexProcessor::handleMidi (const juce::MidiMessage& m)
     else if (m.isPitchWheel())         { midiBend = (float) (m.getPitchWheelValue() - 8192) / 8192.0f; applyJoystick(); }
     else if (m.isSustainPedalOn())     engine.setPedal (true);
     else if (m.isSustainPedalOff())    engine.setPedal (false);
-    else if (m.isControllerOfType (1)) { midiVib   = (float) m.getControllerValue() / 127.0f; applyJoystick(); }
+    else if (m.isControllerOfType (1)) { midiVib   = (float) m.getControllerValue() / 127.0f; engine.p.lfo.wheel = midiVib; applyJoystick(); }
     else if (m.isControllerOfType (2)) { midiTrill = (float) m.getControllerValue() / 127.0f; applyJoystick(); }
     else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
     else if (m.isProgramChange())      recallProgram (m.getProgramChangeNumber() % kNumPrograms);
@@ -406,7 +408,9 @@ void TridexProcessor::applyJoystick()
 {
     const float gx = guiJoyX.load(), gy = guiJoyY.load();
     engine.pitchBend (juce::jlimit (-1.0f, 1.0f, midiBend + gx));
-    engine.joystickY (juce::jlimit (0.0f, 1.0f, midiVib + juce::jmax (0.0f, gy)),
+    // The mod wheel adds vibrato only in its VIBRATO mode; otherwise it drives the LFO (see syncParams).
+    const float wheelVib = apvts.getRawParameterValue ("mw_mode")->load() < 0.5f ? midiVib : 0.0f;
+    engine.joystickY (juce::jlimit (0.0f, 1.0f, wheelVib + juce::jmax (0.0f, gy)),
                       juce::jlimit (0.0f, 1.0f, midiTrill + juce::jmax (0.0f, -gy)));
 }
 
