@@ -226,6 +226,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addF (l, "svib_int",   "Vibrato Intensity", unit, 0.25f);
     addF (l, "svib_speed", "Vibrato Speed", NR (1.0f, 10.0f), 5.5f, "Hz");
     addB (l, "ens_off",    "Ensemble Off", false);
+    addB (l, "st_divide",  "Strings Divide-Down", false);   // Tridex II: phase-locked top-octave bank
 
     // ---- Arpeggiators (Tridex II addition): one per section
     addF (l, "arp_tempo", "Arp Tempo", NR (40.0f, 240.0f, 1.0f), 120.0f, "BPM");
@@ -347,6 +348,7 @@ void TridexProcessor::syncParams()
     p.lfo.wave = idx ("lfo_wave"); p.lfo.rateHz = get ("lfo_rate"); p.lfo.sync = idx ("lfo_sync");
     p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
     p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
+    p.stDivide = on ("st_divide");
     p.fxOrder = { idx ("fx_order_syn"), idx ("fx_order_br"), idx ("fx_order_st") };
     p.lfo.wheelMode = idx ("mw_mode"); p.lfo.wheel = midiVib;
 

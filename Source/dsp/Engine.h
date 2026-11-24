@@ -115,6 +115,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    bool stDivide = false;                              // Tridex II: strings DIVIDE-DOWN (phase-locked top-octave bank)
     std::array<int, 3> fxOrder { 0, 0, 0 };            // Tridex II: effect order per part (index into fxOrders())
     LfoParams lfo;                                      // Tridex II: assignable LFO
     bool ecoQuality = false;                            // Tridex II: filter QUALITY (false Normal 2x, true Eco 1x)
@@ -171,6 +172,20 @@ struct DividerVco
         return -v;
     }
 
+    // All footages from a 16' phase (used by process() and by the strings DIVIDE-DOWN bank).
+    static Out derive (double ph16, double inc16, float mis8, float mis16)
+    {
+        Out o;
+        o.dt16 = std::min (inc16, 0.12); o.dt8 = o.dt16 * 2.0; o.dt4 = o.dt16 * 4.0;
+        o.ph16 = ph16;
+        o.ph8 = ph16 * 2.0; o.ph8 -= std::floor (o.ph8);
+        o.ph4 = ph16 * 4.0; o.ph4 -= std::floor (o.ph4);
+        o.saw4  = saw (o.ph4, o.dt4);
+        o.saw8  = 0.5f * o.saw4 * (1.0f + mis8)  + 0.5f * sq (o.ph8,  o.dt8);
+        o.saw16 = 0.5f * o.saw8 * (1.0f + mis16) + 0.5f * sq (o.ph16, o.dt16);
+        return o;
+    }
+
     Out process (double inc16)
     {
         Out o;
@@ -204,6 +219,7 @@ struct Voice
     Adsr brEnv;                  // per-note brass EG (POLY voicing)
     bool brCut = false;          // brass gate being cut quickly (mono note change)
     int pitchNote = -1;          // note the oscillators are actually playing
+    float ddMix = 0.0f;          // strings DIVIDE-DOWN: 0 = own oscillator, 1 = shared top-octave bank
     float glidePitch = 60.0f, glideTarget = 60.0f, glideCoef = 1.0f;   // portamento / glissando state
     bool gliss = false, glideInit = false;
     float vcaSlew = 0.0f;        // analog-style VCA slew (~0.7 ms): softens envelope edges without dulling attacks
@@ -251,6 +267,7 @@ public:
         for (auto& d : dcPR) d = {};
         for (auto* d : { &dcL, &dcR }) *d = {};
         for (auto& v : volS) v = -1.0f;
+        { Rng dr (0x9E3779B9u); for (int c = 0; c < 12; ++c) { ddDriftCents[(size_t) c] = dr.bipolar() * 3.0f; ddCycles[(size_t) c] = 0.0; ddDriftRatio[(size_t) c] = 1.0; } }
         lfoPhase = lfoFreeBeats = 0.0; lfoValue = 0.0f; lfoFadeEnv = 1.0f; lfoStarted = false;
         brassHeld = stringsHeld = 0; nextVoice = 0;
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
@@ -534,6 +551,17 @@ public:
             const float vibSemis = tri * (jv * p.mgIntensity + (p.delayVib ? delayVibEnv * p.delayVibInt * 0.6f : 0.0f));
             const float trillSemis = trillSq * jt * p.mgIntensity * 2.0f;
             const float globalSemis = p.tuneCents * 0.01f + (float) p.transpose + bend * p.bendRange + vibSemis + trillSemis + lfoPitchSemis;
+            // Strings DIVIDE-DOWN: 12 top-octave counters (C10..B10). Every string note is divided down from
+            // its note's counter, so all octaves of a note are phase-locked, like a string machine.
+            {
+                const double f0 = (double) midiToHz ((float) kDdTop + (globalSemis - (float) p.transpose)) * invSr;
+                for (int c = 0; c < 12; ++c)
+                {
+                    ddDt[(size_t) c] = f0 * kSemiRatio[c] * ddDriftRatio[(size_t) c];
+                    ddCycles[(size_t) c] += ddDt[(size_t) c];
+                    if (ddCycles[(size_t) c] >= 65536.0) ddCycles[(size_t) c] -= 65536.0;
+                }
+            }
 
             pwmPhase += p.pwmSpeed * invSr; if (pwmPhase >= 1.0) pwmPhase -= 1.0;
             const float pwmTri = float (pwmPhase < 0.5 ? 4.0 * pwmPhase - 1.0 : 3.0 - 4.0 * pwmPhase);
@@ -631,7 +659,26 @@ public:
                 if (v.stEnv.isActive())
                 {
                     const float e = v.stEnv.process();
-                    const float raw = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * stMixNorm;
+                    float raw = ((p.st16 ? o1.saw16 : 0.0f) + (p.st8 ? o1.saw8 : 0.0f) + (p.st4 ? o1.saw4 : 0.0f)) * stMixNorm;
+                    // DIVIDE-DOWN: take this note from the shared bank (crossfaded ~10 ms, so the switch never clicks).
+                    // Gliding notes (between semitones) and notes above the bank keep their own oscillator.
+                    {
+                        const float rp = std::round (basePitch);
+                        const int n = (int) rp + p.transpose;
+                        const int c = ((n % 12) + 12) % 12;
+                        const int top = kDdTop + c;
+                        const bool ok = p.stDivide && std::abs (basePitch - rp) < 0.001f && n >= 0 && n + 12 <= top;
+                        v.ddMix += ((ok ? 1.0f : 0.0f) - v.ddMix) * sendSmooth;
+                        if (v.ddMix > 0.0005f && n >= 0 && n + 12 <= top)
+                        {
+                            const int k16 = (top - (n - 12)) / 12;             // octaves from the bank down to the 16' footage
+                            const double scale = std::ldexp (1.0, -k16);
+                            double ph = ddCycles[(size_t) c] * scale; ph -= std::floor (ph);
+                            const auto od = DividerVco::derive (ph, ddDt[(size_t) c] * scale, v.vco1.mis8, v.vco1.mis16);
+                            const float rawDd = ((p.st16 ? od.saw16 : 0.0f) + (p.st8 ? od.saw8 : 0.0f) + (p.st4 ? od.saw4 : 0.0f)) * stMixNorm;
+                            raw += (rawDd - raw) * v.ddMix;
+                        }
+                    }
                     stWeight += e * fg;
                     const float sig = v.balLp2.process (v.balLp1.process (raw));
                     stSum += sig * e * vg;
@@ -1212,6 +1259,7 @@ private:
 
     void updateCoefficients()
     {
+        for (int c = 0; c < 12; ++c) ddDriftRatio[(size_t) c] = std::exp2 ((double) (p.drift * ddDriftCents[(size_t) c]) * 0.01 / 12.0);
         // DAMPER jack (S-1): switch UP = programmed release ignored (release 0), DOWN = programmed release.
         const bool damperUp = p.pedalMode == 1 && ! pedal;
         for (auto& v : voices)
@@ -1249,6 +1297,12 @@ private:
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
     bool ecoApplied = false;
+    static constexpr int kDdTop = 132;                  // DIVIDE-DOWN bank: C10 .. B10
+    static constexpr double kSemiRatio[12] = { 1.0, 1.0594630943592953, 1.122462048309373, 1.189207115002721, 1.2599210498948732,
+                                               1.3348398541700344, 1.4142135623730951, 1.4983070768766815, 1.5874010519681994,
+                                               1.6817928305074290, 1.7817974362806785, 1.8877486253633868 };
+    std::array<double, 12> ddCycles {}, ddDt {}, ddDriftRatio {};
+    std::array<float, 12> ddDriftCents {};             // per note name: every C drifts together
     std::array<int, 3> fxCur { 0, 0, 0 };              // effect order currently running per part
     std::array<float, 3> fxDuck { 1.0f, 1.0f, 1.0f };  // gain while switching order
     float volS[4] { -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume

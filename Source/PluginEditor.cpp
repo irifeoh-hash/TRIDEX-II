@@ -1794,10 +1794,12 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         led ("st_16", bx += 38, (kSwY + kTier), "16'");
         led ("st_8", bx += 34, (kSwY + kTier), "8'");
         led ("st_4", bx += 34, (kSwY + kTier), "4'");
-        led ("bow_on", bx += 40, (kSwY + kTier), "BOWING");
-        led ("svib_off", bx += 40, (kSwY + kTier), "VIBRATO OFF");
-        led ("ens_off", bx += 40, (kSwY + kTier), "ENSEMBLE OFF");
-        octave ("st_octsh", bx += 44, (kSwY + kTier));
+        led ("bow_on", bx += 38, (kSwY + kTier), "BOWING");
+        led ("svib_off", bx += 36, (kSwY + kTier), "VIBRATO\nOFF");
+        led ("ens_off", bx += 36, (kSwY + kTier), "ENSEMBLE\nOFF");
+        led ("st_divide", bx += 36, (kSwY + kTier), "DIVIDE\nDOWN").setTooltip (
+            "DIVIDE-DOWN: all strings notes come from one top-octave bank, so octaves are phase-locked like a string machine");
+        octave ("st_octsh", bx += 42, (kSwY + kTier));
         auto [a, b] = sectionEnd (6);
         sectionBar ((float) a, (float) b, (kBarY + kTier), "STRINGS");
     }

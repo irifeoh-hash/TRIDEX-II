@@ -281,6 +281,7 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | **CUTOFF FREQ / RESONANCE** (VCF) | Strings tone filter. |
 | **16' / 8' / 4'** (cream) | String footages. Combine them freely. |
 | **ENSEMBLE OFF** | Turns off the built-in string ensemble (the lush chorus) for a drier, thinner sound. |
+| **DIVIDE DOWN** | Phase-locked string-machine mode. With it on, every strings note is divided down from one shared top-octave bank, as in classic string machines, instead of using its voice's own oscillator. All octaves of a note are then locked together, so stacked octaves fuse into one clean, solid tone with no beating. DRIFT then detunes each note name (every C together) instead of each voice. Gliding notes, between semitones, keep their own oscillator. Switching is crossfaded, so it doesn't click. |
 | **VOLUME / OUTPUT / OCTAVE ▲▼** | Part level, part on/off, and ±2 octaves (orange display). |
 
 ---
