@@ -201,7 +201,7 @@ the filter, and the VCA EG shapes the volume.
 |---|---|
 | **GLIDE TIME** | Glide between notes, 0–2 s. Glide works in poly and mono modes. |
 | **PORTA / GLISS** | **PORTA** glides smoothly. **GLISS** glides in semitone steps. |
-| **MONO** | Turns the synth into a true monophonic synth: one voice, no clicks, retuned smoothly from note to note. Which held note sounds is set by **Priority** in the top bar. |
+| **MONO** | Turns the synth into a true monophonic synth: one voice, no clicks, retuned smoothly from note to note. Which held note sounds is set by **NOTE PRIORITY** on the SETTINGS page. |
 | **RETRIG / LEGATO** | For mono mode. **RETRIG** restarts the envelopes on every note. **LEGATO** only restarts them when you play a note with no other key held, so overlapping notes slide without retriggering. |
 
 ### Section switches
@@ -260,7 +260,7 @@ whole section shares one filter and one envelope (paraphonic), which gives the c
 |---|---|
 | **PARA / POLY** | **PARA** is the original paraphonic brass, with one filter and envelope for the section. **POLY** is true polyphonic brass: each note has its own filter and envelope, like a normal poly synth. |
 | **GLIDE TIME** and **PORTA / GLISS** | Same as on the synth. |
-| **MONO** and **RETRIG / LEGATO** | True monophonic brass, same behaviour as on the synth. Uses the top-bar Priority. |
+| **MONO** and **RETRIG / LEGATO** | True monophonic brass, same behaviour as on the synth. Uses NOTE PRIORITY on the SETTINGS page. |
 
 ### Section switches
 **VOLUME**, **OUTPUT** (on/off) and **OCTAVE ▲▼** (red display, ±2 octaves).
@@ -297,7 +297,7 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | Control | What it does |
 |---|---|
 | **DELAY VIBRATO** (button) + **INTENSITY** | Vibrato that fades in a moment after each note, for expressive leads. |
-| **JOYSTICK** | Drag the ball. **Left/right** is pitch bend (range set by BEND in the top bar). **Up** adds vibrato and **down** adds trill. It springs back to the centre when released. |
+| **JOYSTICK** | Drag the ball. **Left/right** is pitch bend (range set by BEND RANGE on the SETTINGS page). **Up** adds vibrato and **down** adds trill. It springs back to the centre when released. |
 | **INTENSITY / SPEED** (under the joystick) | Depth and rate of the joystick's vibrato and trill. |
 | **TRANSPOSE** | Transposes the whole instrument ±12 semitones. Use **− / +**, and double-click the value to reset. |
 
@@ -449,7 +449,7 @@ In other DAWs, enable the plugin's extra outputs in the track or instrument outp
 | Pitch bend | Joystick left/right |
 | CC1 (mod wheel) | Vibrato (joystick up) by default, or LFO depth or rate. Set it with **MOD WHEEL** on the LFO panel. |
 | CC2 | Joystick down (trill) |
-| CC64 (sustain) | Pedal, as set by **Pedal** in the top bar |
+| CC64 (sustain) | Pedal, as set by **PEDAL** on the SETTINGS page |
 
 All knobs and switches can be automated from your DAW.
 
