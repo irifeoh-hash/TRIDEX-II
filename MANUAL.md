@@ -5,8 +5,14 @@
 TRIDEX II is a performing-keyboard instrument plugin (VST3 on Windows and macOS, plus AU on macOS),
 inspired by the Korg Trident Mk II. Like the original, it has three instrument sections:
 **SYNTHESIZER**, **BRASS** and **STRINGS**. They share 8 voices (or 16) and can be split or layered across the keyboard.
-TRIDEX II adds per-part arpeggiators and step gates, chorus/ensemble, tape/VHS effects,
-mono and legato modes, a true-polyphonic brass mode, and separate outputs for each part.
+On top of the original, TRIDEX II adds:
+- per-part arpeggiators and step gates,
+- chorus/ensemble and tape/VHS effects, with the effect order adjustable per part,
+- an assignable LFO,
+- mono and legato modes,
+- three brass voicings,
+- a phase-locked DIVIDE DOWN mode for the strings,
+- separate outputs for each part.
 
 ![TRIDEX II](docs/screenshot.png)
 
@@ -25,14 +31,17 @@ mono and legato modes, a true-polyphonic brass mode, and separate outputs for ea
 9. [STRINGS](#9-strings)
 10. [VOLUME](#10-volume)
 11. [DELAY VIBRATO, JOYSTICK and TRANSPOSE](#11-delay-vibrato-joystick-and-transpose)
-12. [Keyboard and split strip](#12-keyboard-and-split-strip)
-13. [ARP page: arpeggiators and step gates](#13-arp-page-arpeggiators-and-step-gates)
-14. [CHORUS page](#14-chorus-page)
-15. [TAPE page](#15-tape-page)
-16. [Signal flow](#16-signal-flow)
-17. [Separate outputs](#17-separate-outputs)
-18. [MIDI](#18-midi)
-19. [Tips](#19-tips)
+12. [LFO](#12-lfo)
+13. [Keyboard and split strip](#13-keyboard-and-split-strip)
+14. [ARP page: arpeggiators and step gates](#14-arp-page-arpeggiators-and-step-gates)
+15. [CHORUS page](#15-chorus-page)
+16. [TAPE page](#16-tape-page)
+17. [FX ROUTING page](#17-fx-routing-page)
+18. [SETTINGS page](#18-settings-page)
+19. [Signal flow](#19-signal-flow)
+20. [Separate outputs](#20-separate-outputs)
+21. [MIDI](#21-midi)
+22. [Tips](#22-tips)
 
 ---
 
@@ -62,7 +71,7 @@ The colours mean the same thing everywhere on the panel and on the pop-up pages:
 | **Green** | SYNTHESIZER |
 | **Red** | BRASS |
 | **Orange** | STRINGS |
-| **Blue** | Plain on/off switches: part OUTPUT, CHORUS ON, TAPE ON |
+| **Blue** | Plain on/off switches: part OUTPUT, CHORUS ON, TAPE ON, LINK ALL PARTS |
 | **White** | Programmer (MANUAL, A–D, 1–8) |
 | **Cream** | Footage (16' / 8' / 4') |
 | **Grey** | Other switches and functions |
@@ -70,7 +79,7 @@ The colours mean the same thing everywhere on the panel and on the pop-up pages:
 The part colours are used on the section titles, the octave displays, the KBD SPLIT controls,
 the split strip above the keys, the per-part selectors on the effect pages, and the step gates.
 
-A red LED on a switch means it is on.
+A red LED on a switch means it is on. The red LED **screens** (POLYPHONY, VOICING, the LFO and SETTINGS choices) are clickable: click the middle for a list, or the arrows to step, or scroll on them.
 
 ---
 
@@ -78,41 +87,15 @@ A red LED on a switch means it is on.
 
 | Control | What it does |
 |---|---|
-| **TRIDEX II / logo** | Click the logo to open the About page. Click it again to close. |
+| **Irife logo** | Click it to open the About page, and click it again to close. |
 | **Display** | Shows `MANUAL` (live panel) or the current program, for example `A1`. |
 | **ARP** | Opens or closes the ARP page (arpeggiators and step gates). |
 | **CHORUS** | Opens or closes the CHORUS page. |
 | **TAPE** | Opens or closes the TAPE page. |
-| **FX** | Opens or closes the FX ROUTING page (see below). |
-| **SETTINGS** | Opens or closes the SETTINGS page (see below). |
+| **FX** | Opens or closes the FX ROUTING page (section 17). |
+| **SETTINGS** | Opens or closes the SETTINGS page (section 18). |
 
 Only one pop-up page (ARP, CHORUS, TAPE, FX, SETTINGS or About) is open at a time. The button for the open page is lit.
-
-### FX ROUTING page
-Each part (SYNTHE, BRASS, STRINGS) has a lane showing its effect chain: **GATE → CHORUS → FLANGER → TAPE** (the classic order).
-
-- **Moving blocks:** click the **◀ ▶** arrows on a block to move it left or right.
-- **ON / OFF:** a block reads **ON** and lights in the part colour when that effect is active for that part.
-- **LINK ALL PARTS** (on by default): moving a block in one lane moves it in all three. Turn it off to give each part its own order. Turning it back on copies the SYNTHE order to the others.
-- **RESET:** returns every lane to the classic order.
-- **No clicks:** changing the order while sound is playing fades the part out and back in over a few milliseconds.
-
-The order matters most with TAPE and GATE:
-- **TAPE last:** wobble and saturation over everything.
-- **TAPE first:** the chorus and flanger sweep over a wobbly, saturated tape sound.
-- **GATE last:** the gate also chops the effect tails and tape hiss, for a harder rhythm.
-
-### SETTINGS page
-Settings are saved with your project.
-
-| Setting | What it does |
-|---|---|
-| **PEDAL** (red display) | Sustain pedal (CC64) behaviour. **OFF** ignores the pedal. **DAMPER** is the Trident-style release switch: with AUTO DAMP on, holding it lets release tails ring. **HOLD** is a normal sustain pedal. |
-| **NOTE PRIORITY** (red display) | Which held note a MONO part (synth or brass) plays: **LAST**, **FIRST**, **LOW** or **HIGH**. |
-| **BEND RANGE** | Pitch-bend range for the joystick and the pitch wheel, 0–12 semitones. |
-| **VELOCITY** | Velocity sensitivity. The original had none, so 0 plays like the hardware. |
-| **ANALOG DRIFT** | Small random per-voice tuning differences and slow wander, like old oscillators. 0 is perfectly in tune. With strings DIVIDE DOWN on, it detunes each note name instead. |
-| **QUALITY** (red display) | **NORMAL**: all filters (synth, brass and strings) run 2× oversampled, for the cleanest resonance and saturation. **ECO**: the filters run at the host sample rate, using roughly 20–40% less CPU. That's useful in big projects or on laptops. At very high cutoff with high resonance, ECO sounds a little brighter and louder. Click the display, or scroll on it, to switch. |
 
 ---
 
@@ -124,7 +107,6 @@ Settings are saved with your project.
 | **TOTAL TUNE** | Master tuning, ±100 cents. |
 | **KBD SPLIT: SYNTHE / BRASS / STRINGS** | Sets where each part plays. **L** plays below that part's split point, **H** plays above it, and **L+H** plays the whole keyboard. |
 | **Split point** (small display under each selector) | That part's own split note. Click the arrows to step it, drag or scroll to move it, and double-click the middle to reset to C3. |
-
 | **POLYPHONY** (red display) | **8 VOICE** (classic, as on the original) or **16 VOICE**. Click the display, or scroll on it, to switch. |
 
 Each part has its own split point, so you can layer two parts on one side and keep the third on the other.
@@ -194,7 +176,7 @@ the filter, and the VCA EG shapes the volume.
 | Control | What it does |
 |---|---|
 | **ATTENUATOR** | Section level trim, ±10 dB. |
-| **AUTO DAMP** | When on, a new note cuts the release tails of notes you have already let go. With **Pedal: Damper (S-1)**, holding the pedal lets the tails ring. |
+| **AUTO DAMP** | When on, a new note cuts the release tails of notes you have already let go. With **PEDAL** set to **DAMPER** on the SETTINGS page, holding the pedal lets the tails ring. |
 
 ### GLIDE and MONO
 | Control | What it does |
@@ -225,7 +207,8 @@ SYNTHESIZER section's sound settings: VCO 1/2, VCO MIX, VCF, both EGs, ATTENUATO
 | **1 – 8** | Recall that program in the current bank. |
 | **WRITE** | Stores the current synth settings. Press **WRITE** (its LED blinks), optionally choose a bank, then press a number **1–8**. Press WRITE again to cancel. |
 
-Programs are saved with your DAW project. They also appear in the host's program list as A1–D8.
+Programs are saved with your DAW project. They also appear in the host's program list as A1–D8. The factory programs fill bank A.
+The LFO's **SYN PATCH** destination can sweep and morph through the programs of the current bank (section 12).
 
 ---
 
@@ -268,7 +251,7 @@ whole section shares one filter and one envelope (paraphonic), which gives the c
 
 ## 9. STRINGS
 
-A divide-down string machine with ensemble, bowing, vibrato and EQ.
+A string machine with ensemble, bowing, vibrato and EQ. By default each string note uses its voice's own oscillator (like the original, where octaves can beat gently against each other). **DIVIDE DOWN** switches to a phase-locked, classic string-machine oscillator bank.
 
 | Control | What it does |
 |---|---|
@@ -276,7 +259,7 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | **HIGH / LOW** (EQUALIZER) | Treble and bass shelving EQ. |
 | **LEVEL / TONE** (BOWING) | Level and brightness of the bow "scrape" at the start of each note. Turned on by the **BOWING** button. |
 | **DELAY TIME / INTENSITY / SPEED** (VIBRATO) | Vibrato that fades in after the delay time. **VIBRATO OFF** turns it off. |
-| **KBD BALANCE** | Tilts the level between the low and high ends of the keyboard. |
+| **KBD BALANCE** | Key-tracked tone. Turned up, each note is filtered relative to its own pitch, so the tone is mellower and more even from the bottom to the top of the keyboard. At 0, every note keeps its full brightness. |
 | **CUTOFF FREQ / RESONANCE** (VCF) | Strings tone filter. |
 | **16' / 8' / 4'** (cream) + level knobs | String footages, which you can combine freely. The small knob under each button sets that footage's level, so you can balance them, for example a little 4' sparkle over a full 8'. |
 | **ENSEMBLE OFF** | Turns off the built-in string ensemble (the lush chorus) for a drier, thinner sound. |
@@ -301,8 +284,11 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | **TRANSPOSE** | Transposes the whole instrument ±12 semitones. Use **− / +**, and double-click the value to reset. |
 
 
-### LFO (assignable)
-Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for the LFO panel, and press it again for the joystick. The LFO keeps running either way. While the panel is closed, the button's LED flashes with the LFO whenever a destination is in use.
+---
+
+## 12. LFO
+
+An assignable LFO with two destinations. Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for the LFO panel, and press it again for the joystick. The LFO keeps running either way. While the panel is closed, the button's LED flashes with the LFO whenever a destination is in use.
 
 | Control | What it does |
 |---|---|
@@ -329,9 +315,10 @@ Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for t
 - **SYN PATCH:** sweeps through the programmer slots of the current bank (A–D). AMOUNT sets how many slots it covers, from 2 up to all 8. Knob-type settings (filter, envelopes, PW, mix, detune, levels) morph smoothly between neighbouring patches. Switch-type settings (octaves, waveforms, KBD track) change at the halfway point. While SYN PATCH is active, the patches replace the synth panel's settings. MONO, glide and AUTO DAMP stay as set on the panel.
 
 The LFO moves the sound around your knob setting; the knob itself doesn't move. Volume destinations work as tremolo and never go louder than the knob. Small PITCH amounts give vibrato, and the maximum is ±1 octave.
+
 ---
 
-## 12. Keyboard and split strip
+## 13. Keyboard and split strip
 
 The on-screen keyboard (C1–C6) plays the instrument with the mouse.
 
@@ -342,7 +329,7 @@ The **strip above the keys** shows where each part plays:
 
 ---
 
-## 13. ARP page: arpeggiators and step gates
+## 14. ARP page: arpeggiators and step gates
 
 Click **ARP** in the top bar. Each part has its own row.
 
@@ -369,7 +356,7 @@ Arp and step gate can be used together or separately.
 
 ---
 
-## 14. CHORUS page
+## 15. CHORUS page
 
 Click **CHORUS** in the top bar. This is a stereo chorus and ensemble in the spirit of classic
 dimension-style units.
@@ -385,14 +372,14 @@ dimension-style units.
 | **TONE** | Brightness of the chorused signal. |
 | **MIX** | Dry/wet balance. |
 
-The chorus runs before the flanger.
+In the default order the chorus runs before the flanger; you can change that per part on the FX ROUTING page.
 
 ---
 
-## 15. TAPE page
+## 16. TAPE page
 
 Click **TAPE** in the top bar. This is a tape and VHS processor, from subtle tape colour to very wobbly worn VHS.
-It sits at the end of each part's effect chain.
+By default it sits at the end of each part's effect chain; you can move it on the FX ROUTING page.
 
 | Control | What it does |
 |---|---|
@@ -415,20 +402,53 @@ sways by about a semitone.
 
 ---
 
-## 16. Signal flow
+## 17. FX ROUTING page
 
-```
-                 ┌─ SYNTHESIZER ─ step gate ─ CHORUS ─ FLANGER ─ TAPE ─┐
-keys ─ arps ─────┼─ BRASS ─────── step gate ─ CHORUS ─ FLANGER ─ TAPE ─┼─ TOTAL VOLUME ─ outputs
-                 └─ STRINGS ───── step gate ─ CHORUS ─ FLANGER ─ TAPE ─┘
-                                (each effect only applies to the parts selected on it; the order per part is set on the FX page)
-```
+Click **FX** in the top bar. Each part (SYNTHE, BRASS, STRINGS) has a lane showing its effect chain: **GATE → CHORUS → FLANGER → TAPE** (the classic order).
 
-The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. Each part is also sent to its own output (see section 17).
+- **Moving blocks:** click the **◀ ▶** arrows on a block to move it left or right.
+- **ON / OFF:** a block reads **ON** and lights in the part colour when that effect is active for that part.
+- **LINK ALL PARTS** (on by default): moving a block in one lane moves it in all three. Turn it off to give each part its own order. Turning it back on copies the SYNTHE order to the others.
+- **RESET:** returns every lane to the classic order.
+- **No clicks:** changing the order while sound is playing fades the part out and back in over a few milliseconds.
+
+The order matters most with TAPE and GATE:
+- **TAPE last:** wobble and saturation over everything.
+- **TAPE first:** the chorus and flanger sweep over a wobbly, saturated tape sound.
+- **GATE last:** the gate also chops the effect tails and tape hiss, for a harder rhythm.
 
 ---
 
-## 17. Separate outputs
+## 18. SETTINGS page
+
+Click **SETTINGS** in the top bar. These are set-and-forget options. They are saved with your project and can be automated.
+
+| Setting | What it does |
+|---|---|
+| **PEDAL** (red display) | Sustain pedal (CC64) behaviour. **OFF** ignores the pedal. **DAMPER** is the Trident-style release switch: with AUTO DAMP on, holding it lets release tails ring. **HOLD** is a normal sustain pedal. |
+| **NOTE PRIORITY** (red display) | Which held note a MONO part (synth or brass) plays: **LAST**, **FIRST**, **LOW** or **HIGH**. |
+| **BEND RANGE** | Pitch-bend range for the joystick and the pitch wheel, 0–12 semitones. |
+| **VELOCITY** | Velocity sensitivity. The original had none, so 0 plays like the hardware. |
+| **ANALOG DRIFT** | Small random per-voice tuning differences and slow wander, like old oscillators. 0 is perfectly in tune. With strings DIVIDE DOWN on, it detunes each note name instead. |
+| **QUALITY** (red display) | **NORMAL**: all filters (synth, brass and strings) run 2× oversampled, for the cleanest resonance and saturation. **ECO**: the filters run at the host sample rate, using roughly 20–40% less CPU. That's useful in big projects or on laptops. At very high cutoff with high resonance, ECO sounds a little brighter and louder. Click the display, or scroll on it, to switch. |
+
+---
+
+## 19. Signal flow
+
+```
+                 ┌─ SYNTHESIZER ─ GATE ─ CHORUS ─ FLANGER ─ TAPE ─┐
+keys ─ arps ─────┼─ BRASS ─────── GATE ─ CHORUS ─ FLANGER ─ TAPE ─┼─ TOTAL VOLUME ─ outputs
+                 └─ STRINGS ───── GATE ─ CHORUS ─ FLANGER ─ TAPE ─┘
+        LFO ─ ─ ─ ─ (modulates any 2 destinations, see section 12)
+  (each effect only processes the parts selected on it; the order of the four blocks is set per part on the FX ROUTING page)
+```
+
+The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. Each part is also sent to its own output (see section 20).
+
+---
+
+## 20. Separate outputs
 
 TRIDEX II has four stereo outputs:
 
@@ -445,12 +465,12 @@ In other DAWs, enable the plugin's extra outputs in the track or instrument outp
 
 ---
 
-## 18. MIDI
+## 21. MIDI
 
 | MIDI | Function |
 |---|---|
-| Notes | Play the instrument. Velocity only matters if **VELO** is above 0. |
-| Pitch bend | Joystick left/right |
+| Notes | Play the instrument. Velocity only matters if **VELOCITY** on the SETTINGS page is above 0. |
+| Pitch bend | Joystick left/right (range: BEND RANGE on the SETTINGS page) |
 | CC1 (mod wheel) | Vibrato (joystick up) by default, or LFO depth or rate. Set it with **MOD WHEEL** on the LFO panel. |
 | CC2 | Joystick down (trill) |
 | CC64 (sustain) | Pedal, as set by **PEDAL** on the SETTINGS page |
@@ -459,13 +479,18 @@ All knobs and switches can be automated from your DAW.
 
 ---
 
-## 19. Tips
+## 22. Tips
 
 - **Classic Trident layer:** strings on L+H, brass on H with a little chorus, and the synth on L as a mono bass with LEGATO and a short glide.
 - **Split points:** give every part its own split to make three-zone setups.
 - **Stereo rhythm:** a step gate with opposite L and R patterns on the strings makes a bouncing pad.
 - **Lo-fi keys:** TAPE on, type VHS, AGE up, HISS a little, DRIVE up on the synth only.
-- **Bigger brass:** switch to POLY, add OSC 2 an octave up with a little detune, and use Chorus II.
+- **Bigger brass:** set VOICING to POLY, add OSC 2 an octave up with a little detune, and use Chorus II.
+- **Drifty synth:** LFO wave RANDOM, a slow RATE, destination SYN VCO2 PITCH with a small AMOUNT, so oscillator 2 wanders against oscillator 1.
+- **Evolving pad:** LFO destination SYN PATCH with a slow SINE, so the synth morphs through the patches in bank A.
+- **Solid string-machine octaves:** strings DIVIDE DOWN on, 16' and 4' knobs turned down a little under a full 8'.
+- **Wobbly chorus:** on the FX ROUTING page, move TAPE before CHORUS, so the chorus sweeps a worn tape sound.
+- **Wheel-controlled wah:** LFO destination SYN CUTOFF and MOD WHEEL set to LFO DEPTH, so the wheel brings the sweep in.
 
 ---
 

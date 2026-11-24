@@ -23,8 +23,8 @@ Install steps are in the [manual](MANUAL.md#1-installing) and in the README insi
 
 - **Three sections that share one voice pool**: 8 voices (classic) or 16, selectable under KEY ASSIGN.
   - **SYNTHESIZER**: two divider VCOs, a 4-pole resonant VCF, two ADSRs, and a 32-slot programmer.
-  - **BRASS**: two oscillators, paraphonic (the original) or true polyphonic.
-  - **STRINGS**: ensemble, bowing, vibrato and EQ.
+  - **BRASS**: two oscillators, with three voicings: PARA (the original), PARA+VCF and POLY.
+  - **STRINGS**: ensemble, bowing, vibrato, EQ and a level for each footage, plus a phase-locked **DIVIDE DOWN** string-machine mode.
 - **Per-part keyboard split**: L, L+H or H, each part with its own split point, shown in a colour strip above the keys.
 - **Mono modes** for synth and brass: true monophonic with note priority (Last, First, Low, High) and RETRIG or LEGATO, plus PORTA or GLISS glide.
 - **Per-part arpeggiators and L/R step gates**, which can sync to the host.
@@ -32,10 +32,12 @@ Install steps are in the [manual](MANUAL.md#1-installing) and in the README insi
   - flanger,
   - dimension-style chorus and ensemble,
   - tape and VHS processor (Studio, Cassette, VHS, Worn VHS) with wow, flutter, drift, age, hiss and drive for each part.
-  
-  Each effect has a selector for each part.
+
+  Each effect has a selector for each part, and the **FX ROUTING** page sets the order of gate, chorus, flanger and tape for each part.
+- **Assignable LFO**: 7 waves, free or host-synced, fade-in and key retrigger, two destinations from a list of 32. The list includes filter and volume targets, VCO 2 pitch, waveform sweeps and a **patch morph** through the programmer bank. The mod wheel can bring the LFO in.
+- **SETTINGS page**: pedal mode, note priority, bend range, velocity, analog drift, and NORMAL / ECO filter quality.
 - **Separate outputs**: Main, plus Synthe, Brass and Strings stereo buses.
-- **Performance controls**: joystick (bend, vibrato, trill), delay vibrato, transpose, octave shift for each part, analog drift and optional velocity.
+- **Performance controls**: joystick (bend, vibrato, trill), delay vibrato, transpose, and octave shift for each part.
 
 ## Build
 
