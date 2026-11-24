@@ -39,6 +39,7 @@ public:
     // white-knob controls are stored in a program.
     static constexpr int kNumPrograms = 32;
     static const juce::StringArray& programmableIds();
+    static const juce::StringArray& lfoDestNames();
 
     void recallProgram (int index);
     void writeProgram (int index);
@@ -50,6 +51,8 @@ public:
     std::atomic<float> guiJoyX { 0.0f }, guiJoyY { 0.0f };   // editor joystick, -1..1
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    float getLfoValue() const { return engine.lfoValueUi.load (std::memory_order_relaxed); }
+    float getLfoPhase() const { return engine.lfoPhaseUi.load (std::memory_order_relaxed); }
     int getGateStep (int section) const { return engine.gateStepUi[(size_t) juce::jlimit (0, 2, section)].load (std::memory_order_relaxed); }
 
 private:

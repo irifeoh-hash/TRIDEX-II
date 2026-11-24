@@ -674,6 +674,173 @@ void AboutPage::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+ChoiceScreen::ChoiceScreen (juce::RangedAudioParameter& p)
+    : param (p), attachment (p, [this] (float v) { index = juce::roundToInt (v); repaint(); })
+{
+    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (&p)) names = c->choices;
+    attachment.sendInitialUpdate();
+}
+
+void ChoiceScreen::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0xff1d0705));
+    g.fillRoundedRectangle (b, 2.5f);
+    g.setColour (kLedOn.withAlpha (0.6f));
+    const float cy = b.getCentreY();
+    juce::Path l, r;
+    l.addTriangle (b.getX() + 4, cy, b.getX() + 9, cy - 4, b.getX() + 9, cy + 4);
+    r.addTriangle (b.getRight() - 4, cy, b.getRight() - 9, cy - 4, b.getRight() - 9, cy + 4);
+    g.fillPath (l); g.fillPath (r);
+    g.setColour (kLedOn);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), fontSize, juce::Font::bold));
+    g.drawFittedText (names[index].toUpperCase(), getLocalBounds().reduced (12, 0), juce::Justification::centred, 1, 0.7f);
+}
+
+void ChoiceScreen::step (int d)
+{
+    const int n = juce::jmax (1, names.size());
+    attachment.setValueAsCompleteGesture ((float) ((index + d + n) % n));
+}
+
+void ChoiceScreen::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.x < 14) { step (-1); return; }
+    if (e.x > getWidth() - 14) { step (+1); return; }
+    juce::PopupMenu m;
+    juce::String group;
+    for (int i = 0; i < names.size(); ++i)
+    {
+        if (sectioned)
+        {
+            const auto pre = names[i].upToFirstOccurrenceOf (" ", false, false);
+            const juce::String g = (pre == "SYN") ? "SYNTHESIZER" : (pre == "BR") ? "BRASS" : (pre == "ST") ? "STRINGS"
+                                 : (pre == "FL" || pre == "CH" || pre == "TP") ? "EFFECTS" : (i == 0 ? "" : "GLOBAL");
+            if (g != group && g.isNotEmpty()) { m.addSectionHeader (g); group = g; }
+        }
+        m.addItem (i + 1, names[i], true, i == index);
+    }
+    juce::Component::SafePointer<ChoiceScreen> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                     [safe] (int r) { if (safe != nullptr && r > 0) safe->attachment.setValueAsCompleteGesture ((float) (r - 1)); });
+}
+
+void ChoiceScreen::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+{
+    if (w.deltaY > 0) step (-1); else if (w.deltaY < 0) step (+1);
+}
+
+//==============================================================================
+LfoPanel::LfoPanel (juce::AudioProcessorValueTreeState& state, std::function<float()> phase, std::function<float()> value)
+    : apvts (state), getPhase (std::move (phase)), getValue (std::move (value))
+{
+    setSize (284, 210);
+    const auto screen = [&] (const char* id, juce::Rectangle<int> r, bool sectioned, const juce::String& tip)
+    {
+        auto c = std::make_unique<ChoiceScreen> (*apvts.getParameter (id));
+        c->sectioned = sectioned;
+        c->setBounds (r);
+        c->setTooltip (tip);
+        addAndMakeVisible (*c);
+        comps.push_back (std::move (c));
+    };
+    screen ("lfo_wave", { 8, 20, 104, 22 }, false, "LFO waveform: click for the list, or use the arrows");
+    screen ("lfo_sync", { 160, 20, 116, 22 }, false, "Sync to the host tempo (OFF = free RATE)");
+    knob ("lfo_rate", { 12, 54, 44, 44 }, false).setTooltip ("LFO rate (free, when SYNC is OFF)");
+    knob ("lfo_fade", { 66, 54, 44, 44 }, false).setTooltip ("Fade-in time after the first key of a phrase");
+    {
+        auto b = std::make_unique<LedButton> ("RETRIG");
+        b->setClickingTogglesState (true);
+        b->setBounds (123, 56, 30, 36);
+        b->setTooltip ("KEY RETRIG: restart the wave on the first key of a phrase (off = free running)");
+        addAndMakeVisible (*b);
+        bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, "lfo_retrig", *b));
+        comps.push_back (std::move (b));
+    }
+    scope = { 166, 56, 110, 40 };
+    for (int k = 0; k < 2; ++k)
+    {
+        const juce::String n (k + 1);
+        const int y = 124 + k * 38;
+        screen (("lfo_dest" + n).toRawUTF8(), { 22, y, 190, 22 }, true, "LFO destination " + n + ": click for the list");
+        knob ("lfo_amt" + n, { 232, y - 9, 40, 40 }, true).setTooltip ("Amount " + n + " (centre = none; double-click to reset)");
+    }
+}
+
+juce::Slider& LfoPanel::knob (const juce::String& id, juce::Rectangle<int> r, bool bipolar)
+{
+    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("scale", bipolar ? "bip" : "uni");
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, getParentComponent() != nullptr ? getParentComponent() : this);
+    s->setBounds (r);
+    addAndMakeVisible (*s);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    if (bipolar) s->setDoubleClickReturnValue (true, 0.0);
+    auto& ref = *s;
+    comps.push_back (std::move (s));
+    return ref;
+}
+
+void LfoPanel::paint (juce::Graphics& g)
+{
+    g.fillAll (kPanel2.darker (0.15f));
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (11.0f, juce::Font::bold).withKerningFactor (0.1f));
+    g.drawText ("LFO", 8, 4, 60, 14, juce::Justification::centredLeft);
+
+    g.setFont (juce::FontOptions (8.0f, juce::Font::bold));
+    g.drawText ("WAVE", 8, 43, 104, 10, juce::Justification::centred);
+    g.drawText ("SYNC", 160, 43, 116, 10, juce::Justification::centred);
+    g.drawText ("RATE", 4, 98, 60, 10, juce::Justification::centred);
+    g.drawText ("FADE", 58, 98, 60, 10, juce::Justification::centred);
+    g.drawText ("KEY RETRIG", 108, 93, 60, 10, juce::Justification::centred);
+    g.setColour (kInk.withAlpha (0.6f));
+    g.drawText ("DESTINATION", 22, 111, 190, 10, juce::Justification::centredLeft);
+    g.drawText ("AMOUNT", 222, 111, 60, 10, juce::Justification::centred);
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    g.drawText ("1", 6, 124, 14, 22, juce::Justification::centred);
+    g.drawText ("2", 6, 162, 14, 22, juce::Justification::centred);
+
+    // Scope: the selected wave with a dot at the current position
+    const auto r = scope.toFloat();
+    g.setColour (juce::Colour (0xff0b0b0c));
+    g.fillRoundedRectangle (r, 4.0f);
+    g.setColour (kInk.withAlpha (0.15f));
+    g.drawHorizontalLine ((int) r.getCentreY(), r.getX() + 4, r.getRight() - 4);
+    const int wave = (int) apvts.getRawParameterValue ("lfo_wave")->load();
+    const auto shape = [wave] (float x) -> float
+    {
+        switch (wave)
+        {
+            case 0: return std::sin (juce::MathConstants<float>::twoPi * x);
+            case 1: return x < 0.25f ? 4.0f * x : (x < 0.75f ? 2.0f - 4.0f * x : 4.0f * x - 4.0f);
+            case 2: return 2.0f * x - 1.0f;
+            case 3: return 1.0f - 2.0f * x;
+            case 4: return x < 0.5f ? 1.0f : -1.0f;
+            case 5: { static const float h[] = { 0.6f, -0.3f, 0.9f, -0.8f, 0.1f, -0.5f }; return h[juce::jlimit (0, 5, (int) (x * 6.0f))]; }
+            default: { static const float h[] = { 0.6f, -0.3f, 0.9f, -0.8f, 0.1f, -0.5f, 0.6f }; const float t = x * 6.0f; const int i = juce::jlimit (0, 5, (int) t);
+                       const float f = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (t - (float) i)); return h[i] + (h[i + 1] - h[i]) * f; }
+        }
+    };
+    const auto in = r.reduced (6.0f, 7.0f);
+    juce::Path path;
+    for (int i = 0; i <= 100; ++i)
+    {
+        const float x = (float) i / 100.0f;
+        const float px = in.getX() + x * in.getWidth(), py = in.getCentreY() - shape (x) * in.getHeight() * 0.5f;
+        if (i == 0) path.startNewSubPath (px, py); else path.lineTo (px, py);
+    }
+    g.setColour (kLedOn.withAlpha (0.45f));
+    g.strokePath (path, juce::PathStrokeType (1.4f));
+    const float ph = juce::jlimit (0.0f, 1.0f, getPhase()), val = juce::jlimit (-1.0f, 1.0f, getValue());
+    const juce::Point<float> dot (in.getX() + ph * in.getWidth(), in.getCentreY() - val * in.getHeight() * 0.5f);
+    g.setColour (kLedOn);
+    g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (dot));
+}
+
+//==============================================================================
 SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state)
 {
     const int W = TridexPanel::kW - 48, H = kLowerY - 40;
@@ -1493,18 +1660,31 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         knob ("mg_int", 70, y0 + 136, "INTENSITY", false);
         knob ("mg_speed", 128, y0 + 136, "SPEED", false);
         auto js = std::make_unique<tdxui::Joystick> (proc.guiJoyX, proc.guiJoyY);
-        js->setBounds (170, y0 + 40, 128, 138);
+        js->setBounds (178, y0 + 40, 128, 138);
 
         // TRANSPOSE (Tridex II), above the joystick
         auto tr = std::make_unique<tdxui::TransposeControl> (*proc.apvts.getParameter ("transpose"));
-        tr->setBounds (176, y0 + 14, 116, 24);
+        tr->setBounds (184, y0 + 14, 116, 24);
         tr->setTooltip ("Transpose -12..+12 semitones (double-click the value to reset)");
         addAndMakeVisible (*tr);
         owned.push_back (std::move (tr));
-        text ({ 176.0f, (float) y0 + 1, 116.0f, 11 }, "TRANSPOSE", 8.0f, true);
+        text ({ 184.0f, (float) y0 + 1, 116.0f, 11 }, "TRANSPOSE", 8.0f, true);
         addAndMakeVisible (*js);
         owned.push_back (std::move (js));
-        sectionBar (40, 298, (float) y0 + 188, "JOYSTICK");
+        sectionBar (40, 306, (float) y0 + 188, "JOYSTICK");
+
+        // Assignable LFO (Tridex II): its panel takes the joystick area; the LFO button stays on top.
+        lfoPanel = std::make_unique<tdxui::LfoPanel> (proc.apvts, [this] { return proc.getLfoPhase(); }, [this] { return proc.getLfoValue(); });
+        lfoPanel->setBounds (26, kLowerY + 2, kKeysX - 28, kH - kLowerY - kRail - 4);
+        addChildComponent (*lfoPanel);
+        auto lb = std::make_unique<tdxui::LedButton> ("LFO");
+        lb->setBounds (146, y0 + 14, 30, 36);
+        lb->setTooltip ("Show the LFO (in place of the joystick); press again for the joystick");
+        lb->onClick = [this] { lfoPanel->setVisible (! lfoPanel->isVisible()); lfoBtn->toFront (false); };
+        addAndMakeVisible (*lb);
+        lfoBtn = lb.get();
+        owned.push_back (std::move (lb));
+        text ({ 136.0f, (float) y0 + 52, 50.0f, 10.0f }, "LFO", 7.0f, false, juce::Justification::centredTop);
     }
 
 
@@ -1696,6 +1876,14 @@ void TridexPanel::timerCallback()
     if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
     if (chorusBtn->lit != chorusPage->isVisible()) { chorusBtn->lit = chorusPage->isVisible(); chorusBtn->repaint(); }
     if (tapeBtn && tapeBtn->lit != tapePage->isVisible()) { tapeBtn->lit = tapePage->isVisible(); tapeBtn->repaint(); }
+    if (lfoBtn != nullptr)
+    {
+        // Lit while the LFO panel is open; otherwise it flashes with the LFO when a destination is in use.
+        const bool used = (proc.apvts.getRawParameterValue ("lfo_dest1")->load() > 0.5f && std::abs (proc.apvts.getRawParameterValue ("lfo_amt1")->load()) > 0.001f)
+                       || (proc.apvts.getRawParameterValue ("lfo_dest2")->load() > 0.5f && std::abs (proc.apvts.getRawParameterValue ("lfo_amt2")->load()) > 0.001f);
+        const bool lit = lfoPanel->isVisible() || (used && proc.getLfoValue() > 0.0f);
+        if (lfoBtn->lit != lit) { lfoBtn->lit = lit; lfoBtn->repaint(); }
+    }
     if (settingsBtn && settingsBtn->lit != settingsPage->isVisible()) { settingsBtn->lit = settingsPage->isVisible(); settingsBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();

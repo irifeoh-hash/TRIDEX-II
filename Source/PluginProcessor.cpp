@@ -37,6 +37,20 @@ void addB (juce::AudioProcessorValueTreeState::ParameterLayout& l, const char* i
 }
 } // namespace
 
+// LFO destination names (order must match tdx::LfoDest). The group prefix (SYN / BR / ST / FX) is used
+// by the editor to section the pop-up list.
+const juce::StringArray& TridexProcessor::lfoDestNames()
+{
+    static const juce::StringArray names {
+        "OFF", "PITCH", "TOTAL VOLUME",
+        "SYN CUTOFF", "SYN RESONANCE", "SYN PW/PWM", "SYN VCO MIX", "SYN DETUNE", "SYN EG INT", "SYN VOLUME",
+        "BR CUTOFF", "BR RESONANCE", "BR OSC MIX", "BR DETUNE", "BR VOLUME",
+        "ST CUTOFF", "ST BALANCE", "ST EQ HIGH", "ST EQ LOW", "ST VOLUME",
+        "FL MANUAL", "FL INTENSITY", "CH DEPTH", "CH MIX", "TP WOW", "TP DRIVE" };
+    jassert (names.size() == tdx::kLfoNumDest);
+    return names;
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout l;
@@ -103,7 +117,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "pedal_mode", "Pedal Mode", { "Off", "Damper (S-1)", "Hold" }, 2);
     addC (l, "note_prio",  "Note Priority", { "Last", "First", "Low", "High" }, 0);
     addC (l, "polyphony",  "Polyphony", { "8 Voices (Classic)", "16 Voices" }, 0);
-    addC (l, "quality",    "Quality", { "Normal", "Eco" }, 0);   // filter oversampling: Normal 2x, Eco 1x (lower CPU)
+    addC (l, "quality",    "Quality", { "Normal", "Eco" }, 0);
+
+    // ---- Assignable LFO (Tridex II): one LFO, two destinations with their own amounts
+    addC (l, "lfo_wave",   "LFO Wave", { "Sine", "Triangle", "Saw Up", "Saw Down", "Square", "S&H", "Random" }, 1);
+    { NR r (0.02f, 30.0f); r.setSkewForCentre (2.0f); addF (l, "lfo_rate", "LFO Rate", r, 2.0f, "Hz"); }
+    addC (l, "lfo_sync",   "LFO Sync", { "Off", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4D", "1/8D", "1/4T", "1/8T", "1/16T" }, 0);
+    addF (l, "lfo_fade",   "LFO Fade In", NR (0.0f, 5.0f, 0.0f, 0.5f), 0.0f, "s");
+    addB (l, "lfo_retrig", "LFO Key Retrig", false);
+    for (int k = 1; k <= 2; ++k)
+    {
+        const juce::String n (k);
+        addC (l, ("lfo_dest" + n).toRawUTF8(), ("LFO Destination " + n).toRawUTF8(), lfoDestNames(), 0);
+        addF (l, ("lfo_amt" + n).toRawUTF8(), ("LFO Amount " + n).toRawUTF8(), NR (-1.0f, 1.0f), 0.0f);
+    }   // filter oversampling: Normal 2x, Eco 1x (lower CPU)
 
     // ---- Synthesizer section (programmable)
     addB (l, "syn_on",    "Synthe Output", true);
@@ -304,6 +331,9 @@ void TridexProcessor::syncParams()
     p.splits = { juce::roundToInt (get ("syn_split")), juce::roundToInt (get ("br_split")), juce::roundToInt (get ("st_split")) }; p.bendRange = get ("bend_range"); p.transpose = juce::roundToInt (get ("transpose"));
     p.octShift = { juce::roundToInt (get ("syn_octsh")), juce::roundToInt (get ("br_octsh")), juce::roundToInt (get ("st_octsh")) }; p.drift = get ("drift");
     p.velSens = get ("vel_sens"); p.pedalMode = idx ("pedal_mode"); p.notePriority = idx ("note_prio"); p.numVoices = idx ("polyphony") == 1 ? 16 : 8; p.ecoQuality = idx ("quality") == 1;
+    p.lfo.wave = idx ("lfo_wave"); p.lfo.rateHz = get ("lfo_rate"); p.lfo.sync = idx ("lfo_sync");
+    p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
+    p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
     p.v1Oct = idx ("v1_oct"); p.v1Wave = static_cast<tdx::Vco1Wave> (idx ("v1_wave"));

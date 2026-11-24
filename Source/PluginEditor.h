@@ -128,6 +128,45 @@ private:
     int index = 0;   // 0 = 8 voices, 1 = 16 voices
 };
 
+// Red LED screen for any choice parameter: arrows step, click the middle for a list.
+// For lists with group prefixes ("SYN CUTOFF", "BR CUTOFF" ...) the pop-up is sectioned by prefix.
+class ChoiceScreen : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    ChoiceScreen (juce::RangedAudioParameter& p);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    bool sectioned = false;
+    float fontSize = 11.0f;
+
+private:
+    void step (int d);
+    juce::RangedAudioParameter& param;
+    juce::StringArray names;
+    juce::ParameterAttachment attachment;
+    int index = 0;
+};
+
+// Assignable LFO panel: shown in place of the joystick (LFO button).
+class LfoPanel : public juce::Component, private juce::Timer
+{
+public:
+    LfoPanel (juce::AudioProcessorValueTreeState& state, std::function<float()> phase, std::function<float()> value);
+    void paint (juce::Graphics&) override;
+    void visibilityChanged() override { if (isVisible()) startTimerHz (30); else stopTimer(); }
+
+private:
+    void timerCallback() override { repaint (scope); }
+    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r, bool bipolar);
+    juce::AudioProcessorValueTreeState& apvts;
+    std::function<float()> getPhase, getValue;
+    std::vector<std::unique_ptr<juce::Component>> comps;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    juce::Rectangle<int> scope;
+};
+
 // SETTINGS page (Tridex II): opened/closed with the SETTINGS button in the top bar.
 class SettingsPage : public juce::Component
 {
@@ -348,7 +387,9 @@ private:
     tdxui::LedButton* tapeBtn = nullptr;
     std::unique_ptr<tdxui::SettingsPage> settingsPage;
     tdxui::LedButton* settingsBtn = nullptr;
-    void togglePage (juce::Component* page);   // show one overlay page (or hide it if open); closes the others
+    void togglePage (juce::Component* page);
+    std::unique_ptr<tdxui::LfoPanel> lfoPanel;
+    tdxui::LedButton* lfoBtn = nullptr;   // show one overlay page (or hide it if open); closes the others
     std::unique_ptr<tdxui::LogoHotspot> logoHotspot;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;

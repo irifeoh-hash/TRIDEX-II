@@ -285,6 +285,29 @@ A divide-down string machine with ensemble, bowing, vibrato and EQ.
 | **INTENSITY / SPEED** (under the joystick) | Depth and rate of the joystick's vibrato and trill. |
 | **TRANSPOSE** | Transposes the whole instrument ±12 semitones. Use **− / +**, and double-click the value to reset. |
 
+
+### LFO (assignable)
+Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for the LFO panel, and press it again for the joystick. The LFO keeps running either way. While the panel is closed, the button's LED flashes with the LFO whenever a destination is in use.
+
+| Control | What it does |
+|---|---|
+| **WAVE** (red display) | Sine, Triangle, Saw Up, Saw Down, Square, S&H (sample & hold) or Random (smooth). Click for the list, or use the arrows. |
+| **SYNC** (red display) | **OFF** uses the RATE knob. A note value (1/1 to 1/32, dotted D, triplet T) locks the LFO to the host tempo. |
+| **RATE** | Free speed, 0.02–30 Hz. Used when SYNC is OFF. |
+| **FADE** | Fades the LFO in after the first key of a phrase, 0–5 s. |
+| **KEY RETRIG** | Restarts the wave on the first key of a phrase. When off, the LFO runs freely. |
+| **Scope** | Shows the selected wave, with a dot at the LFO's current position. |
+| **DESTINATION 1 / 2** (red displays) | Two targets, each with its own **AMOUNT**. Click a display for a list grouped by section (Global, Synthesizer, Brass, Strings, Effects). |
+| **AMOUNT 1 / 2** | Bipolar: the centre does nothing, and turning left inverts the wave. Double-click a knob to reset it to the centre. |
+
+**Destinations:**
+- **Global:** PITCH, TOTAL VOLUME.
+- **Synth:** cutoff, resonance, PW/PWM, VCO mix, detune, EG intensity, volume.
+- **Brass:** cutoff, resonance, OSC mix, detune, volume.
+- **Strings:** cutoff, KBD balance, EQ high, EQ low, volume.
+- **Effects:** flanger manual and intensity, chorus depth and mix, tape wow and tape drive.
+
+The LFO moves the sound around your knob setting; the knob itself doesn't move. Volume destinations work as tremolo and never go louder than the knob. Small PITCH amounts give vibrato, and the maximum is ±1 octave.
 ---
 
 ## 12. Keyboard and split strip

@@ -23,6 +23,30 @@ enum class Vco1Wave { Saw = 0, PW, PWM };
 
 inline constexpr float kKbdTrack[] = { 0.0f, 0.25f, 0.5f, 1.0f, 1.5f }; // Off, Quarter, Half, Full, Over
 
+// Tridex II: assignable LFO destinations (index = the "lfo_dest" choice in the plugin).
+enum LfoDest
+{
+    kLfoOff = 0, kLfoPitch, kLfoMaster,
+    kLfoSynCutoff, kLfoSynRes, kLfoSynPw, kLfoSynVcoMix, kLfoSynDetune, kLfoSynEgInt, kLfoSynVol,
+    kLfoBrCutoff, kLfoBrRes, kLfoBrOscMix, kLfoBrDetune, kLfoBrVol,
+    kLfoStCutoff, kLfoStBalance, kLfoStEqHi, kLfoStEqLo, kLfoStVol,
+    kLfoFlManual, kLfoFlIntensity, kLfoChDepth, kLfoChMix, kLfoTpWow, kLfoTpDrive,
+    kLfoNumDest
+};
+
+struct LfoParams
+{
+    int wave = 1;                 // 0 Sine, 1 Triangle, 2 Saw Up, 3 Saw Down, 4 Square, 5 S&H, 6 Random (smooth)
+    float rateHz = 2.0f;          // free rate
+    int sync = 0;                 // 0 off, else index into kLfoSyncBeats
+    float fade = 0.0f;            // fade-in seconds after the first key of a phrase
+    bool keyRetrig = false;       // restart the wave on the first key of a phrase
+    std::array<int, 2> dest { 0, 0 };
+    std::array<float, 2> amount { 0.0f, 0.0f };   // -1..1
+};
+// Beats (quarter notes) per LFO cycle for the sync choices 1..11: 1/1 1/2 1/4 1/8 1/16 1/32 1/4D 1/8D 1/4T 1/8T 1/16T
+inline constexpr double kLfoSyncBeats[] = { 0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125, 1.5, 0.75, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
+
 struct Params
 {
     // ---- Total control
@@ -68,6 +92,7 @@ struct Params
     bool brMono = false;                                // Tridex II: monophonic brass (last-note priority)
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
+    LfoParams lfo;                                      // Tridex II: assignable LFO
     bool ecoQuality = false;                            // Tridex II: filter QUALITY (false Normal 2x, true Eco 1x)
     int numVoices = 8;                                  // Tridex II: polyphony, 8 (classic) or 16
     int notePriority = 0;                               // Tridex II: MONO note priority: 0 Last, 1 First, 2 Low, 3 High
@@ -201,6 +226,8 @@ public:
         for (auto& d : dcPL) d = {};
         for (auto& d : dcPR) d = {};
         for (auto* d : { &dcL, &dcR }) *d = {};
+        for (auto& v : volS) v = -1.0f;
+        lfoPhase = lfoFreeBeats = 0.0; lfoValue = 0.0f; lfoFadeEnv = 1.0f; lfoStarted = false;
         brassHeld = stringsHeld = 0; nextVoice = 0;
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         for (auto& a : arps) a.clear ([] (int) {});
@@ -221,7 +248,7 @@ public:
 
         if (held[(size_t) note]) releaseKey (note);
         held[(size_t) note] = true; sustained[(size_t) note] = false;
-        if (heldCount++ == 0) { delayVibEnv = 0.0f; for (auto& q : gateFreeQn) q = 0.0; }   // free-running gates restart at step 1
+        if (heldCount++ == 0) { delayVibEnv = 0.0f; lfoPhraseStart = true; for (auto& q : gateFreeQn) q = 0.0; }   // free-running gates restart at step 1
 
         int direct = 0, arped = 0;
         for (int s = 0; s < 3; ++s)
@@ -275,6 +302,138 @@ public:
     // partL / partR (optional): per-part outputs [0] Synth, [1] Brass, [2] Strings; null entries are skipped.
     void render (float* outL, float* outR, int numSamples, float* const* partL = nullptr, float* const* partR = nullptr)
     {
+        const bool lfoUsed = (p.lfo.dest[0] != kLfoOff && p.lfo.amount[0] != 0.0f) || (p.lfo.dest[1] != kLfoOff && p.lfo.amount[1] != 0.0f);
+        if (! lfoUsed)
+        {
+            lfoPitchSemis = 0.0f;
+            advanceLfo (numSamples);   // keep the LFO (and its display) running
+            renderChunk (outL, outR, numSamples, partL, partR);
+            return;
+        }
+        // The LFO moves its targets every 16 samples (from a slew-smoothed value, so no zipper or clicks).
+        const Params base = p;
+        for (int pos = 0; pos < numSamples; pos += kLfoChunk)
+        {
+            const int n = std::min (kLfoChunk, numSamples - pos);
+            advanceLfo (n);
+            applyLfo (base);
+            float* pl[3]; float* pr[3];
+            for (int s = 0; s < 3; ++s)
+            {
+                pl[s] = (partL != nullptr && partL[s] != nullptr) ? partL[s] + pos : nullptr;
+                pr[s] = (partR != nullptr && partR[s] != nullptr) ? partR[s] + pos : nullptr;
+            }
+            renderChunk (outL + pos, outR + pos, n, partL != nullptr ? pl : nullptr, partR != nullptr ? pr : nullptr);
+        }
+        p = base;
+    }
+
+    // LFO state for the editor's display (relaxed atomics, audio thread writes).
+    std::atomic<float> lfoPhaseUi { 0.0f }, lfoValueUi { 0.0f };
+
+private:
+    static constexpr int kLfoChunk = 16;
+
+    static float lfoShape (int wave, double ph, float sh0, float sh1)
+    {
+        const float x = (float) ph;
+        switch (wave)
+        {
+            case 0:  return std::sin (kTwoPi * x);                                       // sine
+            case 1:  return x < 0.25f ? 4.0f * x : (x < 0.75f ? 2.0f - 4.0f * x : 4.0f * x - 4.0f);   // triangle
+            case 2:  return 2.0f * x - 1.0f;                                             // saw up
+            case 3:  return 1.0f - 2.0f * x;                                             // saw down
+            case 4:  return x < 0.5f ? 1.0f : -1.0f;                                     // square
+            case 5:  return sh1;                                                         // sample & hold
+            default: { const float t = 0.5f - 0.5f * std::cos (kPi * x); return sh0 + (sh1 - sh0) * t; }   // smooth random
+        }
+    }
+
+    void advanceLfo (int n)
+    {
+        const auto& L = p.lfo;
+        if (lfoPhraseStart)
+        {
+            lfoPhraseStart = false;
+            lfoFadeEnv = 0.0f;
+            if (L.keyRetrig) { lfoPhase = 0.0; lfoFreeBeats = 0.0; }
+        }
+        double newPhase;
+        const int sync = std::clamp (L.sync, 0, 11);
+        if (sync > 0)
+        {
+            const double beats = kLfoSyncBeats[sync];
+            if (hostPlaying && ! L.keyRetrig) newPhase = hostPpq / beats;
+            else { lfoFreeBeats += hostBpm / 60.0 * n / sr; newPhase = lfoFreeBeats / beats; }
+        }
+        else newPhase = lfoPhase + std::clamp (L.rateHz, 0.01f, 50.0f) * n / sr;
+        newPhase -= std::floor (newPhase);
+        if (newPhase < lfoPhase || ! lfoStarted) { lfoSh0 = lfoSh1; lfoSh1 = lfoRng.bipolar(); lfoStarted = true; }   // new cycle
+        lfoPhase = newPhase;
+
+        const float target = lfoShape (L.wave, lfoPhase, lfoSh0, lfoSh1);
+        const float k = 1.0f - std::exp (-(float) n / (0.002f * sr));      // ~2 ms slew: square / S&H edges don't click
+        lfoValue += (target - lfoValue) * k;
+        lfoFadeEnv = L.fade <= 0.001f ? 1.0f : std::min (1.0f, lfoFadeEnv + (float) n / (L.fade * sr));
+        lfoPhaseUi.store ((float) lfoPhase, std::memory_order_relaxed);
+        lfoValueUi.store (lfoValue * lfoFadeEnv, std::memory_order_relaxed);
+    }
+
+    // Apply both LFO slots on top of the panel settings (base).
+    void applyLfo (const Params& base)
+    {
+        lfoPitchSemis = 0.0f;
+        p = base;
+        for (int slot = 0; slot < 2; ++slot)
+        {
+            const int d = base.lfo.dest[(size_t) slot];
+            const float a = std::clamp (base.lfo.amount[(size_t) slot], -1.0f, 1.0f);
+            if (d == kLfoOff || a == 0.0f) continue;
+            const float v = lfoValue * lfoFadeEnv;   // -1..1
+            const float m = a * v;
+            // Tremolo: never louder than the knob, down to (1 - |amount|).
+            const auto trem = [&] (float& x) { x *= 1.0f - std::abs (a) * 0.5f * (1.0f - v * (a > 0.0f ? 1.0f : -1.0f)); };
+            const auto add = [&] (float& x, float range, float lo, float hi) { x = std::clamp (x + m * range, lo, hi); };
+            switch (d)
+            {
+                case kLfoPitch:       lfoPitchSemis += (a < 0 ? -1.0f : 1.0f) * a * a * 12.0f * v; break;   // up to +-1 octave, fine near centre
+                case kLfoMaster:      trem (p.master); break;
+                case kLfoSynCutoff:   add (p.cutoff, 1.0f, 0.0f, 1.0f); break;
+                case kLfoSynRes:      add (p.res, 1.0f, 0.0f, 1.0f); break;
+                case kLfoSynPw:       add (p.pwInt, 1.0f, 0.0f, 1.0f); break;
+                case kLfoSynVcoMix:   add (p.vcoMix, 1.0f, 0.0f, 1.0f); break;
+                case kLfoSynDetune:   add (p.v2Detune, 50.0f, -50.0f, 50.0f); break;
+                case kLfoSynEgInt:    add (p.egInt, 1.0f, -1.0f, 1.0f); break;
+                case kLfoSynVol:      trem (p.synVolume); break;
+                case kLfoBrCutoff:    add (p.brCutoff, 1.0f, 0.0f, 1.0f); break;
+                case kLfoBrRes:       add (p.brRes, 1.0f, 0.0f, 1.0f); break;
+                case kLfoBrOscMix:    add (p.brOscMix, 1.0f, 0.0f, 1.0f); break;
+                case kLfoBrDetune:    add (p.br2Detune, 50.0f, -50.0f, 50.0f); break;
+                case kLfoBrVol:       trem (p.brVolume); break;
+                case kLfoStCutoff:    add (p.stCutoff, 1.0f, 0.0f, 1.0f); break;
+                case kLfoStBalance:   add (p.kbdBalance, 1.0f, 0.0f, 1.0f); break;
+                case kLfoStEqHi:      add (p.eqHigh, 5.0f, -5.0f, 5.0f); break;
+                case kLfoStEqLo:      add (p.eqLow, 5.0f, -5.0f, 5.0f); break;
+                case kLfoStVol:       trem (p.stVolume); break;
+                case kLfoFlManual:    add (p.flManual, 1.0f, 0.0f, 1.0f); break;
+                case kLfoFlIntensity: add (p.flIntensity, 1.0f, 0.0f, 1.0f); break;
+                case kLfoChDepth:     add (p.chDepth, 1.0f, 0.0f, 1.0f); break;
+                case kLfoChMix:       add (p.chMix, 1.0f, 0.0f, 1.0f); break;
+                case kLfoTpWow:       add (p.tpWow, 1.0f, 0.0f, 1.0f); break;
+                case kLfoTpDrive:     for (auto& x : p.tpDrive) add (x, 1.0f, 0.0f, 1.0f); break;
+                default: break;
+            }
+        }
+    }
+
+    double lfoPhase = 0.0, lfoFreeBeats = 0.0;
+    float lfoValue = 0.0f, lfoFadeEnv = 1.0f, lfoSh0 = 0.0f, lfoSh1 = 0.0f, lfoPitchSemis = 0.0f;
+    bool lfoPhraseStart = false, lfoStarted = false;
+    Rng lfoRng { 0x3C6EF372u };
+
+public:
+    void renderChunk (float* outL, float* outR, int numSamples, float* const* partL, float* const* partR)
+    {
         if (p.ecoQuality != ecoApplied)
         {
             ecoApplied = p.ecoQuality;
@@ -294,6 +453,7 @@ public:
         const float gateSmooth = 1.0f - std::exp (-1.0f / (0.002f * sr));
         const float vcaSlewCoef = 1.0f - std::exp (-1.0f / (0.0007f * sr));
         const float sendSmooth = 1.0f - std::exp (-1.0f / (0.010f * sr));
+        const float volSmooth = 1.0f - std::exp (-1.0f / (0.0015f * sr));
         const float bowSlew = 1.0f - std::exp (-1.0f / (0.003f * sr));
         const int brassOscs = std::max (1, (p.br16 ? 1 : 0) + (p.br8 ? 1 : 0) + (p.br2Scale > 0 ? 1 : 0));
         const int stringFeet = std::max (1, (p.st16 ? 1 : 0) + (p.st8 ? 1 : 0) + (p.st4 ? 1 : 0));
@@ -315,6 +475,13 @@ public:
 
         for (int i = 0; i < numSamples; ++i)
         {
+            // Volume controls are smoothed per sample (~1.5 ms): automation and LFO tremolo never step.
+            {
+                const float tv[4] = { p.master, p.synVolume, p.brVolume, p.stVolume };
+                for (int k = 0; k < 4; ++k)
+                    volS[k] = volS[k] < 0.0f ? tv[k] : volS[k] + (tv[k] - volS[k]) * volSmooth;
+            }
+            const float gMaster = volS[0], gSyn = volS[1], gBr = volS[2], gSt = volS[3];
             // ---- Arpeggiators (one per section)
             for (int s = 0; s < 3; ++s)
             {
@@ -337,7 +504,7 @@ public:
             const float jv = p.delayVib ? 0.0f : joyVib, jt = p.delayVib ? 0.0f : joyTrill;
             const float vibSemis = tri * (jv * p.mgIntensity + (p.delayVib ? delayVibEnv * p.delayVibInt * 0.6f : 0.0f));
             const float trillSemis = trillSq * jt * p.mgIntensity * 2.0f;
-            const float globalSemis = p.tuneCents * 0.01f + (float) p.transpose + bend * p.bendRange + vibSemis + trillSemis;
+            const float globalSemis = p.tuneCents * 0.01f + (float) p.transpose + bend * p.bendRange + vibSemis + trillSemis + lfoPitchSemis;
 
             pwmPhase += p.pwmSpeed * invSr; if (pwmPhase >= 1.0) pwmPhase -= 1.0;
             const float pwmTri = float (pwmPhase < 0.5 ? 4.0 * pwmPhase - 1.0 : 3.0 - 4.0 * pwmPhase);
@@ -451,7 +618,7 @@ public:
             {
                 // POLY voicing: notes were enveloped and filtered individually above.
                 brassEnv.process();   // keep the shared EG ticking so switching back is seamless
-                brass = brSum * (1.0f / std::sqrt (std::max (1.0f, brWeight))) * p.brVolume;
+                brass = brSum * (1.0f / std::sqrt (std::max (1.0f, brWeight))) * gBr;
             }
             else if (brassEnv.isActive() || brassGateOpen)
             {
@@ -460,11 +627,11 @@ public:
                 // so one note and a full chord sit at about the same loudness.
                 const float comp = 1.0f / std::sqrt (std::max (1.0f, brWeight));
                 if (p.brPolyVcf)
-                    brass = brSum * comp * e * p.brVolume;        // already filtered per note
+                    brass = brSum * comp * e * gBr;        // already filtered per note
                 else
                 {
                     brassVcf.setCutoff (20.0f * std::exp2 (p.brCutoff * 10.0f + p.brEgInt * e * 8.0f), p.brRes);
-                    brass = brassVcf.process (brSum * comp * kBrassIn) * kBrassMakeup * e * p.brVolume;
+                    brass = brassVcf.process (brSum * comp * kBrassIn) * kBrassMakeup * e * gBr;
                 }
             }
 
@@ -505,10 +672,10 @@ public:
                 stringsVcfL.setCutoff (hz, p.stRes); stringsVcfR.setCutoff (hz, p.stRes);
                 sL = stringsVcfL.process (sL); sR = stringsVcfR.process (sR);
             }
-            sL = eqHiL.process (eqLoL.process (sL)) * p.stVolume * kStTrim;
-            sR = eqHiR.process (eqLoR.process (sR)) * p.stVolume * kStTrim;
+            sL = eqHiL.process (eqLoL.process (sL)) * gSt * kStTrim;
+            sR = eqHiR.process (eqLoR.process (sR)) * gSt * kStTrim;
 
-            const float synth = synSum * p.synVolume * kSynTrim;
+            const float synth = synSum * gSyn * kSynTrim;
 
             // ---- Step gates: per section L/R gains, smoothed (~2 ms) so the chopping never clicks
             float gl[3], gr[3];
@@ -566,13 +733,13 @@ public:
                 mixL += xl; mixR += xr;
                 if (partL != nullptr && partL[s] != nullptr)
                 {
-                    partL[s][i] = outputStage (dcPL[(size_t) s].process (xl) * p.master);
-                    partR[s][i] = outputStage (dcPR[(size_t) s].process (xr) * p.master);
+                    partL[s][i] = outputStage (dcPL[(size_t) s].process (xl) * gMaster);
+                    partR[s][i] = outputStage (dcPR[(size_t) s].process (xr) * gMaster);
                 }
             }
 
-            outL[i] = outputStage (dcL.process (mixL) * p.master);
-            outR[i] = outputStage (dcR.process (mixR) * p.master);
+            outL[i] = outputStage (dcL.process (mixL) * gMaster);
+            outR[i] = outputStage (dcR.process (mixR) * gMaster);
         }
     }
 
@@ -1026,6 +1193,7 @@ private:
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
     bool ecoApplied = false;
+    float volS[4] { -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume
     OnePoleLP stSmoothL1, stSmoothL2, stSmoothR1, stSmoothR2;
     Adsr brassEnv;
     int brassHeld = 0, stringsHeld = 0;
