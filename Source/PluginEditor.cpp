@@ -703,17 +703,27 @@ void ChoiceScreen::mouseDown (const juce::MouseEvent& e)
     if (e.x < 14) { step (-1); return; }
     if (e.x > getWidth() - 14) { step (+1); return; }
     juce::PopupMenu m;
-    juce::String group;
-    for (int i = 0; i < names.size(); ++i)
+    if (! sectioned)
+        for (int i = 0; i < names.size(); ++i) m.addItem (i + 1, names[i], true, i == index);
+    else
     {
-        if (sectioned)
+        // Group by prefix (SYN / BR / ST / FX), whatever order the entries were added in.
+        const auto groupOf = [this] (int i) -> juce::String
         {
             const auto pre = names[i].upToFirstOccurrenceOf (" ", false, false);
-            const juce::String g = (pre == "SYN") ? "SYNTHESIZER" : (pre == "BR") ? "BRASS" : (pre == "ST") ? "STRINGS"
-                                 : (pre == "FL" || pre == "CH" || pre == "TP") ? "EFFECTS" : (i == 0 ? "" : "GLOBAL");
-            if (g != group && g.isNotEmpty()) { m.addSectionHeader (g); group = g; }
+            return (pre == "SYN") ? "SYNTHESIZER" : (pre == "BR") ? "BRASS" : (pre == "ST") ? "STRINGS"
+                 : (pre == "FL" || pre == "CH" || pre == "TP") ? "EFFECTS" : (i == 0 ? "" : "GLOBAL");
+        };
+        for (const juce::String grp : { "", "GLOBAL", "SYNTHESIZER", "BRASS", "STRINGS", "EFFECTS" })
+        {
+            bool header = false;
+            for (int i = 0; i < names.size(); ++i)
+            {
+                if (groupOf (i) != grp) continue;
+                if (! header && grp.isNotEmpty()) { m.addSectionHeader (grp); header = true; }
+                m.addItem (i + 1, names[i], true, i == index);
+            }
         }
-        m.addItem (i + 1, names[i], true, i == index);
     }
     juce::Component::SafePointer<ChoiceScreen> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),

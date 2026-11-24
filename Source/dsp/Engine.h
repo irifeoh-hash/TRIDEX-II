@@ -31,6 +31,8 @@ enum LfoDest
     kLfoBrCutoff, kLfoBrRes, kLfoBrOscMix, kLfoBrDetune, kLfoBrVol,
     kLfoStCutoff, kLfoStBalance, kLfoStEqHi, kLfoStEqLo, kLfoStVol,
     kLfoFlManual, kLfoFlIntensity, kLfoChDepth, kLfoChMix, kLfoTpWow, kLfoTpDrive,
+    // added later (appended so saved projects keep their destinations)
+    kLfoSynV2Pitch, kLfoSynV1Wave, kLfoSynV2Wave, kLfoBrOsc2Pitch, kLfoBrOsc1Wave, kLfoBrOsc2Wave, kLfoSynPatch,
     kLfoNumDest
 };
 
@@ -55,6 +57,15 @@ inline int fxOrderIndex (const std::array<int, 4>& order)
     return 0;
 }
 
+// One programmer slot's synth settings, for the LFO's SYN PATCH destination.
+struct SynthPatch
+{
+    bool valid = false;
+    int v1Oct = 1, v1Wave = 0, v2Scale = 2, v2Wave = 0, kbdTrack = 2;
+    float pwInt = 0.3f, pwmSpeed = 1.0f, v2Detune = 6.0f, vcoMix = 0.5f, cutoff = 0.6f, res = 0.15f, egInt = 0.2f;
+    float sfA = 0.01f, sfD = 0.6f, sfS = 0.4f, sfR = 0.4f, saA = 0.005f, saD = 0.5f, saS = 0.8f, saR = 0.4f, vcaAttenDb = 0.0f;
+};
+
 struct LfoParams
 {
     int wave = 1;                 // 0 Sine, 1 Triangle, 2 Saw Up, 3 Saw Down, 4 Square, 5 S&H, 6 Random (smooth)
@@ -66,6 +77,7 @@ struct LfoParams
     std::array<float, 2> amount { 0.0f, 0.0f };   // -1..1
     int wheelMode = 0;            // MOD WHEEL: 0 Vibrato (not the LFO), 1 LFO depth (both), 2 LFO 1 depth, 3 LFO 2 depth, 4 LFO rate
     float wheel = 0.0f;           // mod wheel position 0..1
+    int patchBank = 0;            // SYN PATCH sweeps the programs of this bank (0..3 = A..D)
 };
 // Beats (quarter notes) per LFO cycle for the sync choices 1..11: 1/1 1/2 1/4 1/8 1/16 1/32 1/4D 1/8D 1/4T 1/8T 1/16T
 inline constexpr double kLfoSyncBeats[] = { 0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125, 1.5, 0.75, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
@@ -347,7 +359,8 @@ public:
         const bool lfoUsed = (p.lfo.dest[0] != kLfoOff && p.lfo.amount[0] != 0.0f) || (p.lfo.dest[1] != kLfoOff && p.lfo.amount[1] != 0.0f);
         if (! lfoUsed)
         {
-            lfoPitchSemis = 0.0f;
+            lfoPitchSemis = lfoV2Semis = lfoBr2Semis = 0.0f;
+            wavePosS.fill (-1.0f);
             advanceLfo (numSamples);   // keep the LFO (and its display) running
             renderChunk (outL, outR, numSamples, partL, partR);
             return;
@@ -425,7 +438,8 @@ private:
     // Apply both LFO slots on top of the panel settings (base).
     void applyLfo (const Params& base)
     {
-        lfoPitchSemis = 0.0f;
+        lfoPitchSemis = lfoV2Semis = lfoBr2Semis = 0.0f;
+        std::array<float, 4> waveTarget { -1.0f, -1.0f, -1.0f, -1.0f };
         p = base;
         for (int slot = 0; slot < 2; ++slot)
         {
@@ -466,11 +480,58 @@ private:
                 case kLfoChMix:       add (p.chMix, 1.0f, 0.0f, 1.0f); break;
                 case kLfoTpWow:       add (p.tpWow, 1.0f, 0.0f, 1.0f); break;
                 case kLfoTpDrive:     for (auto& x : p.tpDrive) add (x, 1.0f, 0.0f, 1.0f); break;
+                case kLfoSynV2Pitch:  lfoV2Semis  += (a < 0 ? -1.0f : 1.0f) * a * a * 12.0f * v; break;   // VCO 2 against VCO 1
+                case kLfoBrOsc2Pitch: lfoBr2Semis += (a < 0 ? -1.0f : 1.0f) * a * a * 12.0f * v; break;
+                case kLfoSynV1Wave:   waveTarget[0] = std::clamp ((float) static_cast<int> (base.v1Wave) + m * 2.0f, 0.0f, 2.0f); break;
+                case kLfoSynV2Wave:   waveTarget[1] = std::clamp ((float) static_cast<int> (base.v2Wave) + m * 2.0f, 0.0f, 2.0f); break;
+                case kLfoBrOsc1Wave:  waveTarget[2] = std::clamp ((float) base.br1Wave + m * 2.0f, 0.0f, 2.0f); break;
+                case kLfoBrOsc2Wave:  waveTarget[3] = std::clamp ((float) base.br2Wave + m * 2.0f, 0.0f, 2.0f); break;
+                case kLfoSynPatch:
+                {
+                    // Sweep 2..8 programs of the bank (AMOUNT = how many); knob settings morph, switches step.
+                    const int n = 1 + (int) std::lround (std::abs (a) * 7.0f);
+                    if (n < 2) break;
+                    const float pos = (v * (a < 0.0f ? -1.0f : 1.0f) + 1.0f) * 0.5f * (float) (n - 1);
+                    const int i0 = std::clamp ((int) std::floor (pos), 0, n - 1), i1 = std::min (i0 + 1, n - 1);
+                    const float f = pos - (float) i0;
+                    const int bank = std::clamp (base.lfo.patchBank, 0, 3);
+                    const auto& A = patches[(size_t) (bank * 8 + i0)];
+                    const auto& B = patches[(size_t) (bank * 8 + i1)];
+                    if (! A.valid || ! B.valid) break;
+                    const auto lerp = [f] (float x, float y) { return x + (y - x) * f; };
+                    const auto& N = f < 0.5f ? A : B;
+                    p.v1Oct = N.v1Oct; p.v1Wave = static_cast<Vco1Wave> (N.v1Wave); p.v2Scale = N.v2Scale;
+                    p.v2Wave = static_cast<Vco1Wave> (N.v2Wave); p.kbdTrack = N.kbdTrack;
+                    p.pwInt = lerp (A.pwInt, B.pwInt); p.pwmSpeed = lerp (A.pwmSpeed, B.pwmSpeed);
+                    p.v2Detune = lerp (A.v2Detune, B.v2Detune); p.vcoMix = lerp (A.vcoMix, B.vcoMix);
+                    p.cutoff = lerp (A.cutoff, B.cutoff); p.res = lerp (A.res, B.res); p.egInt = lerp (A.egInt, B.egInt);
+                    p.sfA = lerp (A.sfA, B.sfA); p.sfD = lerp (A.sfD, B.sfD); p.sfS = lerp (A.sfS, B.sfS); p.sfR = lerp (A.sfR, B.sfR);
+                    p.saA = lerp (A.saA, B.saA); p.saD = lerp (A.saD, B.saD); p.saS = lerp (A.saS, B.saS); p.saR = lerp (A.saR, B.saR);
+                    p.vcaAttenDb = lerp (A.vcaAttenDb, B.vcaAttenDb);
+                    break;
+                }
                 default: break;
             }
         }
+        smoothWaves (waveTarget);
     }
 
+    // Wave sweep: smoothed (~3 ms) wave positions for synth VCO1, VCO2, brass OSC1, OSC2 (-1 = not swept).
+    void smoothWaves (const std::array<float, 4>& target)
+    {
+        const float k = 1.0f - std::exp (-(float) kLfoChunk / (0.003f * sr));
+        for (size_t i = 0; i < 4; ++i)
+            wavePosS[i] = target[i] < 0.0f ? -1.0f : (wavePosS[i] < 0.0f ? target[i] : wavePosS[i] + (target[i] - wavePosS[i]) * k);
+    }
+
+    std::array<float, 4> wavePosS { -1.0f, -1.0f, -1.0f, -1.0f };
+    float lfoV2Semis = 0.0f, lfoBr2Semis = 0.0f;
+    std::array<SynthPatch, 32> patches {};
+
+public:
+    void setPatches (const std::array<SynthPatch, 32>& t) { patches = t; }
+
+private:
     double lfoPhase = 0.0, lfoFreeBeats = 0.0;
     float lfoWheelS = 0.0f;
     float lfoValue = 0.0f, lfoFadeEnv = 1.0f, lfoSh0 = 0.0f, lfoSh1 = 0.0f, lfoPitchSemis = 0.0f;
@@ -573,6 +634,22 @@ public:
             if (p.v1Wave == Vco1Wave::PW)  pw = 0.5f * (1.0f - p.pwInt);
             if (p.v1Wave == Vco1Wave::PWM) pw = 0.5f * (1.0f - p.pwInt * 1.25f * (0.5f + 0.5f * pwmTri));
             pw = std::max (0.0f, pw);
+            // Pulse widths for the LFO wave sweep (each wave as it would be on its own).
+            const float pwFixed = std::max (0.0f, 0.5f * (1.0f - p.pwInt));
+            const float pwMod = std::max (0.0f, 0.5f * (1.0f - p.pwInt * 1.25f * (0.5f + 0.5f * pwmTri)));
+            const auto synWaveAt = [&] (const DividerVco::Out& o, int stage, float pos)
+            {
+                const int i0 = (int) pos, i1 = std::min (i0 + 1, 2);
+                const auto one = [&] (int w) { return footageWave (o, stage, w == 0 ? -1.0f : (w == 1 ? pwFixed : pwMod)); };
+                const float f = pos - (float) i0, a0 = one (i0);
+                return f > 0.0005f ? a0 + (one (i1) - a0) * f : a0;
+            };
+            const auto brWaveAt = [&] (const DividerVco::Out& o, int stage, float pos)
+            {
+                const int i0 = (int) pos, i1 = std::min (i0 + 1, 2);
+                const float f = pos - (float) i0, a0 = footageWave (o, stage, brassPulseWidth (i0));
+                return f > 0.0005f ? a0 + (footageWave (o, stage, brassPulseWidth (i1)) - a0) * f : a0;
+            };
 
             float synSum = 0.0f, brSum = 0.0f, stSum = 0.0f, bowSum = 0.0f, brWeight = 0.0f, stWeight = 0.0f;
             bool brassGateOpen = false;
@@ -601,15 +678,17 @@ public:
                 // ---- Synth (KLM-378)
                 if (v.aenv.isActive())
                 {
-                    const float osc1 = footageWave (o1, v1Oct, p.v1Wave == Vco1Wave::Saw ? -1.0f : pw);
+                    const float osc1 = wavePosS[0] >= 0.0f ? synWaveAt (o1, v1Oct, wavePosS[0])
+                                                           : footageWave (o1, v1Oct, p.v1Wave == Vco1Wave::Saw ? -1.0f : pw);
 
                     float osc2 = 0.0f;
                     if (p.v2Scale > 0)
                     {
-                        const float s2 = semis + (p.v2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f;
+                        const float s2 = semis + (p.v2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f + lfoV2Semis;
                         const auto o2 = v.vco2.process (midiToHz (s2) * invSr);
                         const int stage = 3 - p.v2Scale;          // 16' -> 2, 8' -> 1, 4' -> 0
-                        osc2 = footageWave (o2, stage, p.v2Wave == Vco1Wave::Saw ? -1.0f : pw);
+                        osc2 = wavePosS[1] >= 0.0f ? synWaveAt (o2, stage, wavePosS[1])
+                                                   : footageWave (o2, stage, p.v2Wave == Vco1Wave::Saw ? -1.0f : pw);
                     }
 
                     const float fe = v.fenv.process();
@@ -629,12 +708,15 @@ public:
                     brassGateOpen = true;
                     brWeight += g * fg;
                     const float bpw = brassPulseWidth (p.br1Wave);
-                    float b = ((p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f)) * brG1;
+                    float b = wavePosS[2] >= 0.0f
+                                ? ((p.br16 ? brWaveAt (o1, 2, wavePosS[2]) : 0.0f) + (p.br8 ? brWaveAt (o1, 1, wavePosS[2]) : 0.0f)) * brG1
+                                : ((p.br16 ? footageWave (o1, 2, bpw) : 0.0f) + (p.br8 ? footageWave (o1, 1, bpw) : 0.0f)) * brG1;
                     if (p.br2Scale > 0)
                     {
-                        const float s2 = semis + (p.br2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f;
+                        const float s2 = semis + (p.br2Detune + v.v2Offset * p.drift) * 0.01f - 12.0f + lfoBr2Semis;
                         const auto ob = v.brVco2.process (midiToHz (s2) * invSr);
-                        b += footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave)) * brG2;
+                        b += (wavePosS[3] >= 0.0f ? brWaveAt (ob, 3 - p.br2Scale, wavePosS[3])
+                                                  : footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave))) * brG2;
                     }
                     // Normalise the oscillator stack (16' + 8' + OSC 2) so it doesn't overdrive the filter.
                     b *= brassMixNorm;

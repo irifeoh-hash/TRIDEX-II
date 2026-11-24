@@ -70,6 +70,11 @@ private:
     std::array<ArpPtrs, 3> arpPtr {};
     std::array<GatePtrs, 3> gatePtr {};
 
+    void rebuildPatchTable();
+    juce::SpinLock patchLock;
+    std::array<tdx::SynthPatch, 32> patchStage {};
+    std::atomic<bool> patchDirty { false };
+
     tdx::Engine engine;
     std::array<Program, kNumPrograms> programs;
     int currentProgram = 0;

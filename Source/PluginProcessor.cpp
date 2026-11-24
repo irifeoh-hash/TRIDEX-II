@@ -46,7 +46,8 @@ const juce::StringArray& TridexProcessor::lfoDestNames()
         "SYN CUTOFF", "SYN RESONANCE", "SYN PW/PWM", "SYN VCO MIX", "SYN DETUNE", "SYN EG INT", "SYN VOLUME",
         "BR CUTOFF", "BR RESONANCE", "BR OSC MIX", "BR DETUNE", "BR VOLUME",
         "ST CUTOFF", "ST BALANCE", "ST EQ HIGH", "ST EQ LOW", "ST VOLUME",
-        "FL MANUAL", "FL INTENSITY", "CH DEPTH", "CH MIX", "TP WOW", "TP DRIVE" };
+        "FL MANUAL", "FL INTENSITY", "CH DEPTH", "CH MIX", "TP WOW", "TP DRIVE",
+        "SYN VCO2 PITCH", "SYN VCO1 WAVE", "SYN VCO2 WAVE", "BR OSC2 PITCH", "BR OSC1 WAVE", "BR OSC2 WAVE", "SYN PATCH" };
     jassert (names.size() == tdx::kLfoNumDest);
     return names;
 }
@@ -307,6 +308,31 @@ TridexProcessor::TridexProcessor()
             for (const auto& [id, v] : factory[(size_t) i].values)
                 prog.values[juce::String (id)] = v;
     }
+    rebuildPatchTable();
+}
+
+// The LFO's SYN PATCH destination reads the programmer slots on the audio thread: build a plain table
+// here (message thread) and hand it over through a spin lock (the audio thread only try-locks).
+void TridexProcessor::rebuildPatchTable()
+{
+    std::array<tdx::SynthPatch, kNumPrograms> t {};
+    for (int i = 0; i < kNumPrograms; ++i)
+    {
+        const auto& v = programs[(size_t) i].values;
+        const auto g = [&v] (const char* id, float def) { auto it = v.find (id); return it != v.end() ? it->second : def; };
+        auto& s = t[(size_t) i];
+        s.valid = true;
+        s.v1Oct = (int) g ("v1_oct", 1); s.v1Wave = (int) g ("v1_wave", 0); s.v2Scale = (int) g ("v2_scale", 2);
+        s.v2Wave = (int) g ("v2_wave", 0); s.kbdTrack = (int) g ("kbd_track", 2);
+        s.pwInt = g ("pw_int", s.pwInt); s.pwmSpeed = g ("pwm_speed", s.pwmSpeed); s.v2Detune = g ("v2_detune", s.v2Detune);
+        s.vcoMix = g ("vco_mix", s.vcoMix); s.cutoff = g ("cutoff", s.cutoff); s.res = g ("res", s.res); s.egInt = g ("eg_int", s.egInt);
+        s.sfA = g ("sf_a", s.sfA); s.sfD = g ("sf_d", s.sfD); s.sfS = g ("sf_s", s.sfS); s.sfR = g ("sf_r", s.sfR);
+        s.saA = g ("sa_a", s.saA); s.saD = g ("sa_d", s.saD); s.saS = g ("sa_s", s.saS); s.saR = g ("sa_r", s.saR);
+        s.vcaAttenDb = g ("vca_att", s.vcaAttenDb);
+    }
+    const juce::SpinLock::ScopedLockType sl (patchLock);
+    patchStage = t;
+    patchDirty.store (true);
 }
 
 bool TridexProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -354,6 +380,12 @@ void TridexProcessor::syncParams()
     p.stDivide = on ("st_divide");
     p.stLevel = { get ("st_lvl16"), get ("st_lvl8"), get ("st_lvl4") };
     p.fxOrder = { idx ("fx_order_syn"), idx ("fx_order_br"), idx ("fx_order_st") };
+    p.lfo.patchBank = currentProgram / 8;
+    if (patchDirty.load())
+    {
+        const juce::SpinLock::ScopedTryLockType tl (patchLock);
+        if (tl.isLocked()) { engine.setPatches (patchStage); patchDirty.store (false); }
+    }
     p.lfo.wheelMode = idx ("mw_mode"); p.lfo.wheel = midiVib;
 
     p.synOn = on ("syn_on"); p.synZone = zone ("syn_zone"); p.synVolume = get ("syn_vol");
@@ -517,6 +549,7 @@ void TridexProcessor::writeProgram (int index)
     if (prog.name == "Init") prog.name = "User";
     currentProgram = index;
     manualMode = false;
+    rebuildPatchTable();
 }
 
 void TridexProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -565,6 +598,7 @@ void TridexProcessor::setStateInformation (const void* data, int sizeInBytes)
         legacyVoicing = val ("br_poly") ? 2 : (val ("br_polyvcf") ? 1 : 0);
     }
     apvts.replaceState (state);
+    rebuildPatchTable();
     if (legacyVoicing >= 0)
         if (auto* prm = apvts.getParameter ("br_voicing"))
             prm->setValueNotifyingHost (prm->convertTo0to1 ((float) legacyVoicing));

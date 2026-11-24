@@ -318,10 +318,15 @@ Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for t
 
 **Destinations:**
 - **Global:** PITCH, TOTAL VOLUME.
-- **Synth:** cutoff, resonance, PW/PWM, VCO mix, detune, EG intensity, volume.
-- **Brass:** cutoff, resonance, OSC mix, detune, volume.
+- **Synth:** cutoff, resonance, PW/PWM, VCO mix, detune, EG intensity, volume, plus **VCO2 PITCH**, **VCO1 WAVE**, **VCO2 WAVE** and **PATCH** (see below).
+- **Brass:** cutoff, resonance, OSC mix, detune, volume, plus **OSC2 PITCH**, **OSC1 WAVE** and **OSC2 WAVE**.
 - **Strings:** cutoff, KBD balance, EQ high, EQ low, volume.
 - **Effects:** flanger manual and intensity, chorus depth and mix, tape wow and tape drive.
+
+**The special destinations:**
+- **VCO2 PITCH / OSC2 PITCH:** moves oscillator 2 against oscillator 1, by up to ±1 octave at full AMOUNT. It's gentle near the centre, so a small amount with a slow RANDOM or SINE wave gives a drifting, wandering detune.
+- **VCO1 / VCO2 / OSC1 / OSC2 WAVE:** sweeps through the waveforms: Saw → PW → PWM for the synth, Saw → Square → Pulse for brass. Waves crossfade smoothly into each other instead of jumping, so the sweep never clicks.
+- **SYN PATCH:** sweeps through the programmer slots of the current bank (A–D). AMOUNT sets how many slots it covers, from 2 up to all 8. Knob-type settings (filter, envelopes, PW, mix, detune, levels) morph smoothly between neighbouring patches. Switch-type settings (octaves, waveforms, KBD track) change at the halfway point. While SYN PATCH is active, the patches replace the synth panel's settings. MONO, glide and AUTO DAMP stay as set on the panel.
 
 The LFO moves the sound around your knob setting; the knob itself doesn't move. Volume destinations work as tremolo and never go louder than the knob. Small PITCH amounts give vibrato, and the maximum is ±1 octave.
 ---
