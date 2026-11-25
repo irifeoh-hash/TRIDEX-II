@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Tridex80 VERSION 0.1.0)
+project(Tridex80 VERSION 2.1.0)   # plugin version reported to hosts: bump it for each release
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,7 @@ endif()
 juce_add_plugin(Tridex80
     VST3_AUTO_MANIFEST ${TRIDEX_VST3_MANIFEST}
     COMPANY_NAME "Tridex Audio"
+    BUNDLE_ID com.tridexaudio.tridexii
     PLUGIN_MANUFACTURER_CODE Tdxa
     PLUGIN_CODE Tx82
     FORMATS ${TRIDEX_FORMATS}

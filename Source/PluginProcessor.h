@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "dsp/Engine.h"
 
-class TridexProcessor : public juce::AudioProcessor
+class TridexProcessor : public juce::AudioProcessor, private juce::AsyncUpdater
 {
 public:
     TridexProcessor();
@@ -26,7 +26,7 @@ public:
 
     // Host program list = the 32 programmer slots (A1..D8).
     int getNumPrograms() override { return kNumPrograms; }
-    int getCurrentProgram() override { return currentProgram; }
+    int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override { recallProgram (index); }
     const juce::String getProgramName (int index) override;
     void changeProgramName (int index, const juce::String& name) override;
@@ -43,7 +43,7 @@ public:
 
     void recallProgram (int index);
     void writeProgram (int index);
-    bool isManual() const { return manualMode; }
+    bool isManual() const { return manualMode.load(); }
     void setManual() { manualMode = true; }
 
     juce::AudioProcessorValueTreeState apvts;
@@ -77,8 +77,12 @@ private:
 
     tdx::Engine engine;
     std::array<Program, kNumPrograms> programs;
-    int currentProgram = 0;
-    bool manualMode = true;
+    std::atomic<int> currentProgram { 0 };
+    std::atomic<bool> manualMode { true };
+    // MIDI program changes arrive on the audio thread; the recall itself (which reads the program
+    // maps the editor can write) runs on the message thread.
+    std::atomic<int> pendingProgram { -1 };
+    void handleAsyncUpdate() override { const int n = pendingProgram.exchange (-1); if (n >= 0) recallProgram (n); }
     float midiBend = 0.0f, midiVib = 0.0f, midiTrill = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TridexProcessor)

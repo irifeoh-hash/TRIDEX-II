@@ -282,7 +282,10 @@ public:
         for (auto& v : volS) v = -1.0f;
         { Rng dr (0x9E3779B9u); for (int c = 0; c < 12; ++c) { ddDriftCents[(size_t) c] = dr.bipolar() * 3.0f; ddCycles[(size_t) c] = 0.0; ddDriftRatio[(size_t) c] = 1.0; } }
         lfoPhase = lfoFreeBeats = 0.0; lfoValue = 0.0f; lfoFadeEnv = 1.0f; lfoStarted = false;
-        brassHeld = stringsHeld = 0; nextVoice = 0;
+        brassHeld = stringsHeld = 0; nextVoice = 0; heldCount = 0;
+        monoCurrent = -1; monoCount = 0; sCurrent = -1; sCount = 0; sVoice = bVoice = -1; sVoiceNote = bVoiceNote = -1;
+        lastNote = { -1, -1 };
+        stVcfMix = 0.0f; wavePosS.fill (-1.0f);
         held.fill (false); sustained.fill (false); keyMask.fill (0); arpMask.fill (0); sounding = makeSounding();
         for (auto& a : arps) a.clear ([] (int) {});
     }
@@ -300,9 +303,12 @@ public:
         if (p.stOn  && inZone (p.stZone, note, 2))  mask |= kSt;
         if (mask == 0) return;
 
-        if (held[(size_t) note]) releaseKey (note);
+        // A repeated note-on for a key that is already down (overlapping notes in a piano roll) retriggers
+        // it, but it is still one held key, so it must not be counted twice.
+        const bool wasHeld = held[(size_t) note];
+        if (wasHeld) releaseKey (note);
         held[(size_t) note] = true; sustained[(size_t) note] = false;
-        if (heldCount++ == 0) { delayVibEnv = 0.0f; lfoPhraseStart = true; for (auto& q : gateFreeQn) q = 0.0; }   // free-running gates restart at step 1
+        if (! wasHeld && heldCount++ == 0) { delayVibEnv = 0.0f; lfoPhraseStart = true; for (auto& q : gateFreeQn) q = 0.0; }   // free-running gates restart at step 1
 
         int direct = 0, arped = 0;
         for (int s = 0; s < 3; ++s)
@@ -356,7 +362,10 @@ public:
     // partL / partR (optional): per-part outputs [0] Synth, [1] Brass, [2] Strings; null entries are skipped.
     void render (float* outL, float* outR, int numSamples, float* const* partL = nullptr, float* const* partR = nullptr)
     {
-        const bool lfoUsed = (p.lfo.dest[0] != kLfoOff && p.lfo.amount[0] != 0.0f) || (p.lfo.dest[1] != kLfoOff && p.lfo.amount[1] != 0.0f);
+        // Wave sweeps still gliding back to the panel wave keep the chunked path running until they arrive.
+        const bool sweepHoming = wavePosS[0] >= 0.0f || wavePosS[1] >= 0.0f || wavePosS[2] >= 0.0f || wavePosS[3] >= 0.0f;
+        const bool lfoUsed = (p.lfo.dest[0] != kLfoOff && p.lfo.amount[0] != 0.0f) || (p.lfo.dest[1] != kLfoOff && p.lfo.amount[1] != 0.0f)
+                          || sweepHoming;
         if (! lfoUsed)
         {
             lfoPitchSemis = lfoV2Semis = lfoBr2Semis = 0.0f;
@@ -513,15 +522,26 @@ private:
                 default: break;
             }
         }
-        smoothWaves (waveTarget);
+        const std::array<float, 4> home { (float) static_cast<int> (base.v1Wave), (float) static_cast<int> (base.v2Wave),
+                                          (float) base.br1Wave, (float) base.br2Wave };
+        smoothWaves (waveTarget, home);
     }
 
     // Wave sweep: smoothed (~3 ms) wave positions for synth VCO1, VCO2, brass OSC1, OSC2 (-1 = not swept).
-    void smoothWaves (const std::array<float, 4>& target)
+    // When a sweep stops, the position glides back to the panel's own wave (home) and only then hands over.
+    void smoothWaves (const std::array<float, 4>& target, const std::array<float, 4>& home)
     {
         const float k = 1.0f - std::exp (-(float) kLfoChunk / (0.003f * sr));
         for (size_t i = 0; i < 4; ++i)
-            wavePosS[i] = target[i] < 0.0f ? -1.0f : (wavePosS[i] < 0.0f ? target[i] : wavePosS[i] + (target[i] - wavePosS[i]) * k);
+        {
+            if (target[i] >= 0.0f)
+                wavePosS[i] = wavePosS[i] < 0.0f ? target[i] : wavePosS[i] + (target[i] - wavePosS[i]) * k;
+            else if (wavePosS[i] >= 0.0f)
+            {
+                wavePosS[i] += (home[i] - wavePosS[i]) * k;
+                if (std::abs (wavePosS[i] - home[i]) < 0.002f) wavePosS[i] = -1.0f;
+            }
+        }
     }
 
     std::array<float, 4> wavePosS { -1.0f, -1.0f, -1.0f, -1.0f };
@@ -825,12 +845,24 @@ public:
             // Gentle string-machine smoothing (~9 kHz, 12 dB/oct) takes the raw sawtooth fizz off.
             sL = stSmoothL2.process (stSmoothL1.process (sL));
             sR = stSmoothR2.process (stSmoothR1.process (sR));
-            if (p.stCutoff < 0.999f || p.stRes > 0.001f)
             {
-                // Strings VCF (Tridex II), after the ensemble so it shapes the whole section.
-                const float hz = 20.0f * std::exp2 (p.stCutoff * 10.0f);
-                stringsVcfL.setCutoff (hz, p.stRes); stringsVcfR.setCutoff (hz, p.stRes);
-                sL = stringsVcfL.process (sL); sR = stringsVcfR.process (sR);
+                // Strings VCF (Tridex II), after the ensemble so it shapes the whole section. It always runs
+                // and is crossfaded in (~10 ms) once CUTOFF / RESONANCE move off "fully open", so turning
+                // it on (by hand or from the LFO) never starts it from stale state.
+                const bool engaged = p.stCutoff < 0.999f || p.stRes > 0.001f;
+                stVcfMix += ((engaged ? 1.0f : 0.0f) - stVcfMix) * sendSmooth;
+                if (engaged || stVcfMix > 1.0e-4f)
+                {
+                    const float hz = 20.0f * std::exp2 (p.stCutoff * 10.0f);
+                    stringsVcfL.setCutoff (hz, p.stRes); stringsVcfR.setCutoff (hz, p.stRes);
+                    const float fL = stringsVcfL.process (sL), fR = stringsVcfR.process (sR);
+                    sL += (fL - sL) * stVcfMix; sR += (fR - sR) * stVcfMix;
+                }
+                else
+                {
+                    stVcfMix = 0.0f;
+                    stringsVcfL.process (sL); stringsVcfR.process (sR);   // keep the state current, unheard
+                }
             }
             sL = eqHiL.process (eqLoL.process (sL)) * gSt * kStTrim;
             sR = eqHiR.process (eqLoR.process (sR)) * gSt * kStTrim;
@@ -1380,6 +1412,7 @@ private:
     int nextVoice = 0;
 
     Ladder brassVcf, stringsVcfL, stringsVcfR;
+    float stVcfMix = 0.0f;                              // strings VCF crossfade (0 = bypassed)
     bool ecoApplied = false;
     static constexpr int kDdTop = 132;                  // DIVIDE-DOWN bank: C10 .. B10
     static constexpr double kSemiRatio[12] = { 1.0, 1.0594630943592953, 1.122462048309373, 1.189207115002721, 1.2599210498948732,

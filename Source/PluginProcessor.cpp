@@ -451,7 +451,7 @@ void TridexProcessor::handleMidi (const juce::MidiMessage& m)
     else if (m.isControllerOfType (1)) { midiVib   = (float) m.getControllerValue() / 127.0f; engine.p.lfo.wheel = midiVib; applyJoystick(); }
     else if (m.isControllerOfType (2)) { midiTrill = (float) m.getControllerValue() / 127.0f; applyJoystick(); }
     else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
-    else if (m.isProgramChange())      recallProgram (m.getProgramChangeNumber() % kNumPrograms);
+    else if (m.isProgramChange())      { pendingProgram.store (m.getProgramChangeNumber() % kNumPrograms); triggerAsyncUpdate(); }
 }
 
 // Joystick X = pitch bend, Y+ = vibrato, Y- = trill. MIDI and the on-screen stick add.
@@ -556,8 +556,8 @@ void TridexProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     juce::ValueTree progs ("PROGRAMS");
-    progs.setProperty ("current", currentProgram, nullptr);
-    progs.setProperty ("manual", manualMode, nullptr);
+    progs.setProperty ("current", currentProgram.load(), nullptr);
+    progs.setProperty ("manual", manualMode.load(), nullptr);
     for (int i = 0; i < kNumPrograms; ++i)
     {
         juce::ValueTree pt ("P");

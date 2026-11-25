@@ -94,12 +94,27 @@ jobs:
     needs: build
     if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # One publish at a time, and only the newest commit on main publishes (an older run finishing
+    # late must not replace a newer build).
+    concurrency:
+      group: publish-release
+      cancel-in-progress: false
     steps:
+      - name: Check this is still the newest commit
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          if [ "$HEAD_SHA" = "$GITHUB_SHA" ]; then echo "latest=true" >> "$GITHUB_OUTPUT"
+          else echo "latest=false" >> "$GITHUB_OUTPUT"; echo "main is now $HEAD_SHA; its own run will publish."; fi
       - uses: actions/download-artifact@v4
+        if: steps.head.outputs.latest == 'true'
         with:
           path: artifacts
           merge-multiple: true
       - name: Create Release
+        if: steps.head.outputs.latest == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

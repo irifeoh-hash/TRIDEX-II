@@ -69,6 +69,16 @@ int main (int argc, char** argv)
     tdx::Params bpm = bp; bpm.brMono = true; fails += render ("brass_poly_mono", bpm, out);
     for (int ty = 0; ty < 4; ++ty) { tdx::Params tp; tp.brOn = tp.stOn = true; tp.tpOn = true; tp.tpType = ty; tp.tpWow = 1.0f; tp.tpDrift = 1.0f;
         tp.tpDrive = { 1.0f, 0.5f, 0.0f }; tp.tpHiss = 0.5f; tp.tpSpeed = 2.0f; fails += render (ty == 0 ? "tape_studio" : (ty == 1 ? "tape_cass" : (ty == 2 ? "tape_vhs" : "tape_worn")), tp, out); }
+    // Newer features (Tridex II): LFO, FX routing, strings DIVIDE DOWN + footage levels, ECO quality.
+    tdx::Params lf; lf.stOn = true; lf.lfo.wave = 0; lf.lfo.rateHz = 3.0f; lf.lfo.dest = { tdx::kLfoSynCutoff, tdx::kLfoStVol }; lf.lfo.amount = { 0.6f, -0.8f };
+    fails += render ("lfo_cut_trem", lf, out);
+    tdx::Params lw; lw.brOn = true; lw.lfo.wave = 6; lw.lfo.rateHz = 1.5f; lw.lfo.dest = { tdx::kLfoSynV2Pitch, tdx::kLfoBrOsc1Wave }; lw.lfo.amount = { 0.3f, 1.0f };
+    lw.lfo.fade = 0.5f; lw.lfo.keyRetrig = true; fails += render ("lfo_pitch_wave", lw, out);
+    tdx::Params fx; fx.brOn = fx.stOn = true; fx.chOn = fx.chBrass = fx.chStrings = true; fx.flSynth = fx.flStrings = true; fx.flFeedback = 0.8f;
+    fx.tpOn = true; fx.tpType = 2; for (auto& g : fx.gate) { g.on = true; g.sync = false; g.left = { 1, 0, 1, 1, 0, 1, 0, 1 }; }
+    fx.fxOrder = { 23, 17, 6 }; fails += render ("fx_order", fx, out);
+    tdx::Params dd; dd.synOn = false; dd.stOn = true; dd.stDivide = true; dd.st16 = true; dd.stLevel = { 0.4f, 1.0f, 0.7f }; fails += render ("divide_down", dd, out);
+    tdx::Params eco = flt; eco.ecoQuality = true; fails += render ("eco_filters", eco, out);
     std::printf (fails ? "FAILED\n" : "PASSED\n");
     return fails;
 }
