@@ -1028,6 +1028,9 @@ SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state) : apvts (
     quality->setTooltip ("Filter quality: NORMAL = 2x oversampled filters, ECO = lower CPU. Click to switch.");
     addAndMakeVisible (*quality);
     labels.push_back ({ quality->getBounds(), "QUALITY" });
+    // OUTPUTS
+    addScreen ("out_mode", { x0 + 830, y, 130, 24 }, "OUTPUTS",
+               "MAIN MIX: everything on output 1. SEPARATE: Synthe / Brass / Strings on outputs 2 / 3 / 4 only (Main goes silent)");
 }
 
 void SettingsPage::addKnob (const char* id, juce::Rectangle<int> r, const juce::String& label)
@@ -1079,9 +1082,11 @@ void SettingsPage::paint (juce::Graphics& g)
     g.drawText ("MIDI & PLAYING", x0 + 24, card.getY() + 18, 300, 14, juce::Justification::centredLeft);
     g.drawText ("TUNING", x0 + 500, card.getY() + 18, 200, 14, juce::Justification::centredLeft);
     g.drawText ("SOUND / CPU", x0 + 630, card.getY() + 18, 200, 14, juce::Justification::centredLeft);
+    g.drawText ("OUTPUTS", x0 + 810, card.getY() + 18, 200, 14, juce::Justification::centredLeft);
     g.setColour (kInk.withAlpha (0.12f));
     g.drawVerticalLine (x0 + 482, (float) card.getY() + 16, (float) card.getY() + 120);
     g.drawVerticalLine (x0 + 612, (float) card.getY() + 16, (float) card.getY() + 120);
+    g.drawVerticalLine (x0 + 792, (float) card.getY() + 16, (float) card.getY() + 120);
     g.drawHorizontalLine (card.getY() + 132, (float) x0 + 20, (float) card.getRight() - 20);
 
     g.setColour (kInk);
@@ -1097,8 +1102,10 @@ void SettingsPage::paint (juce::Graphics& g)
                       "BEND RANGE: joystick / pitch-wheel bend in semitones (0-12).   VELOCITY: 0 = no velocity response, as on the original.\n"
                       "ANALOG DRIFT: small random tuning differences and slow wander per voice (0 = perfectly in tune).\n"
                       "QUALITY: NORMAL runs the filters 2x oversampled (cleanest). ECO runs them at the host rate for roughly 20-40% less CPU; "
-                      "at very high cutoff with high resonance it is a little brighter.",
-                      x0 + 24, card.getY() + 144, card.getWidth() - 48, 110, juce::Justification::topLeft, 8);
+                      "at very high cutoff with high resonance it is a little brighter.\n"
+                      "OUTPUTS: MAIN MIX sends everything to output 1 (outputs 2-4 are silent). SEPARATE sends SYNTHE / BRASS / STRINGS "
+                      "to outputs 2 / 3 / 4 only, and Main goes silent, so nothing is doubled in your mixer.",
+                      x0 + 24, card.getY() + 144, card.getWidth() - 48, 130, juce::Justification::topLeft, 9);
 }
 
 //==============================================================================

@@ -128,6 +128,7 @@ struct Params
     bool synMono = false;                               // Tridex II: monophonic synth
     bool synLegato = true, brLegato = true;             // MONO: true = LEGATO (overlapping notes don't retrigger), false = RETRIG
     std::array<float, 3> stLevel { 1.0f, 1.0f, 1.0f };  // Tridex II: strings 16' / 8' / 4' levels
+    bool outSeparate = false;                           // Tridex II OUTPUTS: false = all parts on Main, true = parts on their own outputs only
     bool stDivide = false;                              // Tridex II: strings DIVIDE-DOWN (phase-locked top-octave bank)
     std::array<int, 3> fxOrder { 0, 0, 0 };            // Tridex II: effect order per part (index into fxOrders())
     LfoParams lfo;                                      // Tridex II: assignable LFO
@@ -949,11 +950,17 @@ public:
                 }
                 if (duck < 1.0f) { const float dg = duck * duck * (3.0f - 2.0f * duck); xl *= dg; xr *= dg; }
 
-                mixL += xl; mixR += xr;
-                if (partL != nullptr && partL[s] != nullptr)
+                // OUTPUTS: each part goes to Main OR to its own output, never both (crossfaded ~10 ms).
+                // A part whose own output is switched off in the host always stays on Main.
+                const bool hasOwn = partL != nullptr && partL[s] != nullptr && partR != nullptr && partR[s] != nullptr;
+                auto& sep = sepMix[(size_t) s];
+                sep += (((p.outSeparate && hasOwn) ? 1.0f : 0.0f) - sep) * sendSmooth;
+                if (sep < 1.0e-5f && ! (p.outSeparate && hasOwn)) sep = 0.0f;
+                mixL += xl * (1.0f - sep); mixR += xr * (1.0f - sep);
+                if (hasOwn)
                 {
-                    partL[s][i] = outputStage (dcPL[(size_t) s].process (xl) * gMaster);
-                    partR[s][i] = outputStage (dcPR[(size_t) s].process (xr) * gMaster);
+                    partL[s][i] = outputStage (dcPL[(size_t) s].process (xl * sep) * gMaster);
+                    partR[s][i] = outputStage (dcPR[(size_t) s].process (xr * sep) * gMaster);
                 }
             }
 
@@ -1420,6 +1427,7 @@ private:
                                                1.6817928305074290, 1.7817974362806785, 1.8877486253633868 };
     std::array<double, 12> ddCycles {}, ddDt {}, ddDriftRatio {};
     std::array<float, 12> ddDriftCents {};             // per note name: every C drifts together
+    std::array<float, 3> sepMix { 0.0f, 0.0f, 0.0f };   // OUTPUTS crossfade per part (0 = Main, 1 = own output)
     std::array<int, 3> fxCur { 0, 0, 0 };              // effect order currently running per part
     std::array<float, 3> fxDuck { 1.0f, 1.0f, 1.0f };  // gain while switching order
     float volS[7] { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };   // smoothed master / synth / brass / strings volume, strings footage levels

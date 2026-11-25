@@ -119,6 +119,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TridexProcessor::createLayou
     addC (l, "note_prio",  "Note Priority", { "Last", "First", "Low", "High" }, 0);
     addC (l, "polyphony",  "Polyphony", { "8 Voices (Classic)", "16 Voices" }, 0);
     addC (l, "quality",    "Quality", { "Normal", "Eco" }, 0);
+    addC (l, "out_mode",   "Outputs", { "MAIN MIX", "SEPARATE" }, 0);   // all parts on output 1, or each part on its own output only
 
     // ---- FX routing (Tridex II): effect order per part, optionally linked
     {
@@ -377,7 +378,7 @@ void TridexProcessor::syncParams()
     p.lfo.wave = idx ("lfo_wave"); p.lfo.rateHz = get ("lfo_rate"); p.lfo.sync = idx ("lfo_sync");
     p.lfo.fade = get ("lfo_fade"); p.lfo.keyRetrig = on ("lfo_retrig");
     p.lfo.dest = { idx ("lfo_dest1"), idx ("lfo_dest2") }; p.lfo.amount = { get ("lfo_amt1"), get ("lfo_amt2") };
-    p.stDivide = on ("st_divide");
+    p.stDivide = on ("st_divide"); p.outSeparate = idx ("out_mode") == 1;
     p.stLevel = { get ("st_lvl16"), get ("st_lvl8"), get ("st_lvl4") };
     p.fxOrder = { idx ("fx_order_syn"), idx ("fx_order_br"), idx ("fx_order_st") };
     p.lfo.patchBank = currentProgram / 8;

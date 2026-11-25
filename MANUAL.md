@@ -431,6 +431,7 @@ Click **SETTINGS** in the top bar. These are set-and-forget options. They are sa
 | **VELOCITY** | Velocity sensitivity. The original had none, so 0 plays like the hardware. |
 | **ANALOG DRIFT** | Small random per-voice tuning differences and slow wander, like old oscillators. 0 is perfectly in tune. With strings DIVIDE DOWN on, it detunes each note name instead. |
 | **QUALITY** (red display) | **NORMAL**: all filters (synth, brass and strings) run 2× oversampled, for the cleanest resonance and saturation. **ECO**: the filters run at the host sample rate, using roughly 20–40% less CPU. That's useful in big projects or on laptops. At very high cutoff with high resonance, ECO sounds a little brighter and louder. Click the display, or scroll on it, to switch. |
+| **OUTPUTS** (red display) | **MAIN MIX** (default) sends everything to output 1, and outputs 2–4 are silent. **SEPARATE** sends SYNTHE, BRASS and STRINGS to outputs 2, 3 and 4 *only*, and Main goes silent, so nothing is ever doubled in your mixer. Switching is crossfaded. See section 20. |
 
 ---
 
@@ -444,16 +445,30 @@ keys ─ arps ─────┼─ BRASS ─────── GATE ─ CHORUS 
   (each effect only processes the parts selected on it; the order of the four blocks is set per part on the FX ROUTING page)
 ```
 
-The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. Each part is also sent to its own output (see section 20).
+The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. With OUTPUTS set to SEPARATE, each part goes to its own output instead of Main (see section 20).
 
 ---
 
 ## 20. Separate outputs
 
-TRIDEX II has four stereo outputs:
+TRIDEX II has four stereo outputs. **OUTPUTS** on the SETTINGS page chooses how the parts use them, and each part is only ever on one of them:
 
-| Output | Contents |
-|---|---|
+| OUTPUTS | Output 1 (Main) | Output 2 (Synthe) | Output 3 (Brass) | Output 4 (Strings) |
+|---|---|---|---|---|
+| **MAIN MIX** (default) | All three parts, mixed | silent | silent | silent |
+| **SEPARATE** | silent | Synthesizer with its effects | Brass with its effects | Strings with its effects |
+
+TOTAL VOLUME sets the level in both modes. If the host has a part's output switched off, that part stays on Main even in SEPARATE mode, so it never goes missing.
+
+**FL Studio:**
+1. Set OUTPUTS to **SEPARATE**.
+2. In the plugin wrapper, open the settings (gear icon) and go to *Processing*.
+3. Route outputs 2, 3 and 4 to their own mixer tracks, for example with *Auto map outputs*.
+
+Output 1 is then silent, so the parts aren't doubled on the plugin's main mixer track.
+In other DAWs, enable the plugin's extra outputs in the track or instrument output settings, and set OUTPUTS to SEPARATE.
+
+---|---|
 | **Main** | The full mix |
 | **Synthe** | Synthesizer part only, with its effects |
 | **Brass** | Brass part only, with its effects |
