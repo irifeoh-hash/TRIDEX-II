@@ -66,6 +66,23 @@ struct SynthPatch
     float sfA = 0.01f, sfD = 0.6f, sfS = 0.4f, sfR = 0.4f, saA = 0.005f, saD = 0.5f, saS = 0.8f, saR = 0.4f, vcaAttenDb = 0.0f;
 };
 
+// One LFO cycle: phase 0..1 -> -1..1. sh0 / sh1 are the previous and current random values
+// (used by S&H and smooth random). Shared by the engine and the editor's LFO scope.
+inline float lfoShape (int wave, double ph, float sh0, float sh1)
+{
+    const float x = (float) ph;
+    switch (wave)
+    {
+        case 0:  return std::sin (kTwoPi * x);                                       // sine
+        case 1:  return x < 0.25f ? 4.0f * x : (x < 0.75f ? 2.0f - 4.0f * x : 4.0f * x - 4.0f);   // triangle
+        case 2:  return 2.0f * x - 1.0f;                                             // saw up
+        case 3:  return 1.0f - 2.0f * x;                                             // saw down
+        case 4:  return x < 0.5f ? 1.0f : -1.0f;                                     // square
+        case 5:  return sh1;                                                         // sample & hold
+        default: { const float t = 0.5f - 0.5f * std::cos (kPi * x); return sh0 + (sh1 - sh0) * t; }   // smooth random
+    }
+}
+
 struct LfoParams
 {
     int wave = 1;                 // 0 Sine, 1 Triangle, 2 Saw Up, 3 Saw Down, 4 Square, 5 S&H, 6 Random (smooth)
@@ -398,21 +415,6 @@ public:
 
 private:
     static constexpr int kLfoChunk = 16;
-
-    static float lfoShape (int wave, double ph, float sh0, float sh1)
-    {
-        const float x = (float) ph;
-        switch (wave)
-        {
-            case 0:  return std::sin (kTwoPi * x);                                       // sine
-            case 1:  return x < 0.25f ? 4.0f * x : (x < 0.75f ? 2.0f - 4.0f * x : 4.0f * x - 4.0f);   // triangle
-            case 2:  return 2.0f * x - 1.0f;                                             // saw up
-            case 3:  return 1.0f - 2.0f * x;                                             // saw down
-            case 4:  return x < 0.5f ? 1.0f : -1.0f;                                     // square
-            case 5:  return sh1;                                                         // sample & hold
-            default: { const float t = 0.5f - 0.5f * std::cos (kPi * x); return sh0 + (sh1 - sh0) * t; }   // smooth random
-        }
-    }
 
     void advanceLfo (int n)
     {

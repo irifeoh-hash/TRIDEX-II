@@ -841,19 +841,14 @@ void LfoPanel::paint (juce::Graphics& g)
     g.setColour (kInk.withAlpha (0.15f));
     g.drawHorizontalLine ((int) r.getCentreY(), r.getX() + 4, r.getRight() - 4);
     const int wave = (int) apvts.getRawParameterValue ("lfo_wave")->load();
+    // The engine's own wave function; S&H and Random are shown as six example random steps.
     const auto shape = [wave] (float x) -> float
     {
-        switch (wave)
-        {
-            case 0: return std::sin (juce::MathConstants<float>::twoPi * x);
-            case 1: return x < 0.25f ? 4.0f * x : (x < 0.75f ? 2.0f - 4.0f * x : 4.0f * x - 4.0f);
-            case 2: return 2.0f * x - 1.0f;
-            case 3: return 1.0f - 2.0f * x;
-            case 4: return x < 0.5f ? 1.0f : -1.0f;
-            case 5: { static const float h[] = { 0.6f, -0.3f, 0.9f, -0.8f, 0.1f, -0.5f }; return h[juce::jlimit (0, 5, (int) (x * 6.0f))]; }
-            default: { static const float h[] = { 0.6f, -0.3f, 0.9f, -0.8f, 0.1f, -0.5f, 0.6f }; const float t = x * 6.0f; const int i = juce::jlimit (0, 5, (int) t);
-                       const float f = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (t - (float) i)); return h[i] + (h[i + 1] - h[i]) * f; }
-        }
+        static const float h[] = { 0.6f, -0.3f, 0.9f, -0.8f, 0.1f, -0.5f, 0.6f };
+        if (wave < 5) return tdx::lfoShape (wave, x, 0.0f, 0.0f);
+        const float t = x * 6.0f;
+        const int i = juce::jlimit (0, 5, (int) t);
+        return wave == 5 ? tdx::lfoShape (5, 0.0, 0.0f, h[i]) : tdx::lfoShape (6, t - (float) i, h[i], h[i + 1]);
     };
     const auto in = r.reduced (6.0f, 7.0f);
     juce::Path path;
