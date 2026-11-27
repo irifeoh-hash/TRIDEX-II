@@ -219,16 +219,7 @@ struct DividerVco
 
     Out process (double inc16)
     {
-        Out o;
-        o.dt16 = std::min (inc16, 0.12); o.dt8 = o.dt16 * 2.0; o.dt4 = o.dt16 * 4.0;
-        o.ph16 = phase;
-        o.ph8 = phase * 2.0; o.ph8 -= std::floor (o.ph8);
-        o.ph4 = phase * 4.0; o.ph4 -= std::floor (o.ph4);
-
-        o.saw4  = saw (o.ph4, o.dt4);
-        o.saw8  = 0.5f * o.saw4 * (1.0f + mis8)  + 0.5f * sq (o.ph8,  o.dt8);
-        o.saw16 = 0.5f * o.saw8 * (1.0f + mis16) + 0.5f * sq (o.ph16, o.dt16);
-
+        const Out o = derive (phase, inc16, mis8, mis16);
         phase += o.dt16; if (phase >= 1.0) phase -= 1.0;
         return o;
     }
