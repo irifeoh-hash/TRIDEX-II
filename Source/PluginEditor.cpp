@@ -736,32 +736,69 @@ void ChoiceScreen::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWhe
 }
 
 //==============================================================================
+juce::Slider& Controls::knob (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r, const juce::String& scale)
+{
+    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s->getProperties().set ("scale", scale);
+    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
+    s->setPopupDisplayEnabled (true, true, &owner);
+    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
+    auto& ref = add (owner, std::move (s), r);
+    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, ref));
+    return ref;
+}
+
+LedButton& Controls::led (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r)
+{
+    auto b = std::make_unique<LedButton> (id);
+    b->setClickingTogglesState (true);
+    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
+    auto& ref = add (owner, std::move (b), r);
+    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, ref));
+    return ref;
+}
+
+ChoiceScreen& Controls::screen (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r)
+{
+    return add (owner, std::make_unique<ChoiceScreen> (*apvts.getParameter (id)), r);
+}
+
+juce::ComboBox& Controls::combo (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r)
+{
+    auto cb = std::make_unique<juce::ComboBox>();
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
+    {
+        cb->addItemList (choice->choices, 1);
+        cb->setTooltip (choice->getName (64));
+    }
+    auto& ref = add (owner, std::move (cb), r);
+    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, id, ref));
+    return ref;
+}
+
+//==============================================================================
 LfoPanel::LfoPanel (juce::AudioProcessorValueTreeState& state, std::function<float()> phase, std::function<float()> value)
     : apvts (state), getPhase (std::move (phase)), getValue (std::move (value))
 {
     setSize (284, 210);
     const auto screen = [&] (const char* id, juce::Rectangle<int> r, bool sectioned, const juce::String& tip)
     {
-        auto c = std::make_unique<ChoiceScreen> (*apvts.getParameter (id));
-        c->sectioned = sectioned;
-        c->setBounds (r);
-        c->setTooltip (tip);
-        addAndMakeVisible (*c);
-        comps.push_back (std::move (c));
+        auto& s = ctl.screen (*this, id, r);
+        s.sectioned = sectioned;
+        s.setTooltip (tip);
+    };
+    const auto knob = [&] (const juce::String& id, juce::Rectangle<int> r, bool bipolar) -> juce::Slider&
+    {
+        auto& s = ctl.knob (*this, id, r, bipolar ? "bip" : "uni");
+        if (bipolar) s.setDoubleClickReturnValue (true, 0.0);
+        return s;
     };
     screen ("lfo_wave", { 8, 20, 104, 22 }, false, "LFO waveform: click for the list, or use the arrows");
     screen ("lfo_sync", { 160, 20, 116, 22 }, false, "Sync to the host tempo (OFF = free RATE)");
     knob ("lfo_rate", { 12, 54, 44, 44 }, false).setTooltip ("LFO rate (free, when SYNC is OFF)");
     knob ("lfo_fade", { 66, 54, 44, 44 }, false).setTooltip ("Fade-in time after the first key of a phrase");
-    {
-        auto b = std::make_unique<LedButton> ("RETRIG");
-        b->setClickingTogglesState (true);
-        b->setBounds (123, 56, 30, 36);
-        b->setTooltip ("KEY RETRIG: restart the wave on the first key of a phrase (off = free running)");
-        addAndMakeVisible (*b);
-        bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, "lfo_retrig", *b));
-        comps.push_back (std::move (b));
-    }
+    ctl.led (*this, "lfo_retrig", { 123, 56, 30, 36 })
+        .setTooltip ("KEY RETRIG: restart the wave on the first key of a phrase (off = free running)");
     scope = { 166, 56, 110, 40 };
     for (int k = 0; k < 2; ++k)
     {
@@ -771,21 +808,6 @@ LfoPanel::LfoPanel (juce::AudioProcessorValueTreeState& state, std::function<flo
         knob ("lfo_amt" + n, { 232, y - 9, 40, 40 }, true).setTooltip ("Amount " + n + " (centre = none; double-click to reset)");
     }
     screen ("mw_mode", { 86, 189, 126, 18 }, false, "What the MOD WHEEL (CC1) does: VIBRATO (classic) or bring in / speed up the LFO");
-}
-
-juce::Slider& LfoPanel::knob (const juce::String& id, juce::Rectangle<int> r, bool bipolar)
-{
-    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
-    s->getProperties().set ("scale", bipolar ? "bip" : "uni");
-    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-    s->setPopupDisplayEnabled (true, true, getParentComponent() != nullptr ? getParentComponent() : this);
-    s->setBounds (r);
-    addAndMakeVisible (*s);
-    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
-    if (bipolar) s->setDoubleClickReturnValue (true, 0.0);
-    auto& ref = *s;
-    comps.push_back (std::move (s));
-    return ref;
 }
 
 void LfoPanel::paint (juce::Graphics& g)
@@ -1021,12 +1043,10 @@ SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state) : apvts (
     // TUNING
     addKnob ("drift", { x0 + 520, y - 16, 56, 56 }, "ANALOG DRIFT");
     // SOUND / CPU
-    quality = std::make_unique<PolyDisplay> (*state.getParameter ("quality"));
+    quality = &ctl.add (*this, std::make_unique<PolyDisplay> (*state.getParameter ("quality")), { x0 + 650, y, 110, 24 });
     quality->text0 = "NORMAL";
     quality->text1 = "ECO";
-    quality->setBounds (x0 + 650, y, 110, 24);
     quality->setTooltip ("Filter quality: NORMAL = 2x oversampled filters, ECO = lower CPU. Click to switch.");
-    addAndMakeVisible (*quality);
     labels.push_back ({ quality->getBounds(), "QUALITY" });
     // OUTPUTS
     addScreen ("out_mode", { x0 + 830, y, 130, 24 }, "OUTPUTS",
@@ -1035,26 +1055,14 @@ SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state) : apvts (
 
 void SettingsPage::addKnob (const char* id, juce::Rectangle<int> r, const juce::String& label)
 {
-    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
-    s->getProperties().set ("scale", juce::String (id) == "bend_range" ? "none" : "uni");   // bend is 0-12 st, not 0-10
-    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-    s->setPopupDisplayEnabled (true, true, this);
-    s->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
-    addAndMakeVisible (*s);
-    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
+    ctl.knob (*this, id, r, juce::String (id) == "bend_range" ? "none" : "uni");   // bend is 0-12 st, not 0-10
     labels.push_back ({ r, label });
-    comps.push_back (std::move (s));
 }
 
 void SettingsPage::addScreen (const char* id, juce::Rectangle<int> r, const juce::String& label, const juce::String& tip)
 {
-    auto c = std::make_unique<ChoiceScreen> (*apvts.getParameter (id));
-    c->setBounds (r);
-    c->setTooltip (tip);
-    addAndMakeVisible (*c);
+    ctl.screen (*this, id, r).setTooltip (tip);
     labels.push_back ({ r, label });
-    comps.push_back (std::move (c));
 }
 
 void SettingsPage::paint (juce::Graphics& g)
@@ -1116,16 +1124,21 @@ TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
     card = { 18, 40, W - 36, 340 };
     const int x = card.getX(), y1 = card.getY() + 64, y2 = card.getY() + 214;
 
+    const auto led = [&] (const char* id, juce::Rectangle<int> r, const juce::String& label, juce::Colour cap)
+    {
+        auto& b = ctl.led (*this, id, r);
+        b.cap = cap;
+        labels.push_back ({ &b, label });
+    };
+    const auto knob = [&] (const char* id, juce::Rectangle<int> r, const juce::String& label)
+    {
+        labels.push_back ({ &ctl.knob (*this, id, r), label });
+    };
     led ("tp_on", { x + 26, y1 + 6, 34, 42 }, "TAPE ON", kCapBlue);
 
-    auto type = std::make_unique<juce::ComboBox>();
-    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("tp_type"))) type->addItemList (c->choices, 1);
-    type->setBounds (x + 90, y1 + 14, 130, 26);
-    type->setTooltip ("Tape type: Studio / Cassette / VHS / Worn VHS");
-    addAndMakeVisible (*type);
-    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, "tp_type", *type));
-    labels.push_back ({ type.get(), "TAPE TYPE" });
-    comps.push_back (std::move (type));
+    auto& type = ctl.combo (*this, "tp_type", { x + 90, y1 + 14, 130, 26 });
+    type.setTooltip ("Tape type: Studio / Cassette / VHS / Worn VHS");
+    labels.push_back ({ &type, "TAPE TYPE" });
 
     const char* ids[] = { "tp_wow", "tp_flutter", "tp_speed", "tp_drift", "tp_age", "tp_hiss", "tp_mix" };
     const char* names[] = { "WOW", "FLUTTER", "SPEED", "DRIFT", "AGE", "HISS", "MIX" };
@@ -1141,37 +1154,6 @@ TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
         led (selIds[i], { px, y2 + 6, 34, 42 }, parts[i], kPartCap[i]);
         knob (drvIds[i], { px + 56, y2 - 6, 70, 70 }, juce::String (parts[i]) + " DRIVE");
     }
-}
-
-juce::Slider& TapePage::knob (const juce::String& id, juce::Rectangle<int> r, const juce::String& label)
-{
-    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
-    s->getProperties().set ("scale", "uni");
-    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-    s->setPopupDisplayEnabled (true, true, this);
-    s->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
-    addAndMakeVisible (*s);
-    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
-    labels.push_back ({ s.get(), label });
-    auto& ref = *s;
-    comps.push_back (std::move (s));
-    return ref;
-}
-
-LedButton& TapePage::led (const juce::String& id, juce::Rectangle<int> r, const juce::String& label, juce::Colour capCol)
-{
-    auto b = std::make_unique<LedButton> (id);
-    b->setClickingTogglesState (true);
-    b->cap = capCol;
-    b->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
-    addAndMakeVisible (*b);
-    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
-    labels.push_back ({ b.get(), label });
-    auto& ref = *b;
-    comps.push_back (std::move (b));
-    return ref;
 }
 
 void TapePage::paint (juce::Graphics& g)
@@ -1263,73 +1245,30 @@ ChorusPage::ChorusPage (juce::AudioProcessorValueTreeState& state) : apvts (stat
     card = { 18, 40, W - 36, 230 };
     const int y = card.getY() + 70;
 
-    led ("ch_on", { card.getX() + 26, y, 34, 42 });
-    labels.back().second = "CHORUS ON";
+    const auto led = [&] (const char* id, juce::Rectangle<int> r, const juce::String& label, juce::Colour cap)
+    {
+        auto& b = ctl.led (*this, id, r);
+        b.cap = cap;
+        labels.push_back ({ &b, label });
+    };
+    led ("ch_on", { card.getX() + 26, y, 34, 42 }, "CHORUS ON", kCapBlue);
 
-    auto mode = std::make_unique<juce::ComboBox>();
-    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ch_mode"))) mode->addItemList (c->choices, 1);
-    mode->setBounds (card.getX() + 90, y + 8, 120, 26);
-    addAndMakeVisible (*mode);
-    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, "ch_mode", *mode));
-    labels.push_back ({ mode.get(), "MODE" });
-    comps.push_back (std::move (mode));
+    auto& mode = ctl.combo (*this, "ch_mode", { card.getX() + 90, y + 8, 120, 26 });
+    labels.push_back ({ &mode, "MODE" });
 
-    auto sp = std::make_unique<SpaceButtons> (*apvts.getParameter ("ch_space"));
-    sp->setBounds (card.getX() + 232, y, 150, 42);
-    sp->setTooltip ("SPACE 1-4: depth of the dimension-style mode (SPACE)");
-    addAndMakeVisible (*sp);
-    labels.push_back ({ sp.get(), "SPACE (MODE: SPACE)" });
-    comps.push_back (std::move (sp));
+    auto& sp = ctl.add (*this, std::make_unique<SpaceButtons> (*apvts.getParameter ("ch_space")), { card.getX() + 232, y, 150, 42 });
+    sp.setTooltip ("SPACE 1-4: depth of the dimension-style mode (SPACE)");
+    labels.push_back ({ &sp, "SPACE (MODE: SPACE)" });
 
     const char* kIds[] = { "ch_rate", "ch_depth", "ch_width", "ch_tone", "ch_mix" };
     const char* kNames[] = { "RATE", "DEPTH", "WIDTH", "TONE", "MIX" };
     for (int i = 0; i < 5; ++i)
-    {
-        auto& k = knob (kIds[i], { card.getX() + 410 + i * 82, y - 14, 70, 70 });
-        labels.back() = { &k, kNames[i] };
-    }
+        labels.push_back ({ &ctl.knob (*this, kIds[i], { card.getX() + 410 + i * 82, y - 14, 70, 70 }), kNames[i] });
 
     const char* pIds[] = { "ch_syn", "ch_br", "ch_st" };
     const char* pNames[] = { "SYNTHE", "BRASS", "STRINGS" };
     for (int i = 0; i < 3; ++i)
-    {
-        led (pIds[i], { card.getX() + 840 + i * 52, y, 34, 42 });
-        labels.back().second = pNames[i];
-    }
-}
-
-juce::Slider& ChorusPage::knob (const juce::String& id, juce::Rectangle<int> r)
-{
-    auto s = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
-    s->getProperties().set ("scale", "uni");
-    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-    s->setPopupDisplayEnabled (true, true, this);
-    s->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
-    addAndMakeVisible (*s);
-    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
-    labels.push_back ({ s.get(), {} });
-    auto& ref = *s;
-    comps.push_back (std::move (s));
-    return ref;
-}
-
-LedButton& ChorusPage::led (const juce::String& id, juce::Rectangle<int> r)
-{
-    auto b = std::make_unique<LedButton> (id);
-    b->setClickingTogglesState (true);
-    b->cap = id == "ch_on" ? kCapBlue : kCapGrey;
-    if (id == "ch_syn") b->cap = kPartCap[0];
-    if (id == "ch_br")  b->cap = kPartCap[1];
-    if (id == "ch_st")  b->cap = kPartCap[2];
-    b->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
-    addAndMakeVisible (*b);
-    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
-    labels.push_back ({ b.get(), {} });
-    auto& ref = *b;
-    comps.push_back (std::move (b));
-    return ref;
+        led (pIds[i], { card.getX() + 840 + i * 52, y, 34, 42 }, pNames[i], kPartCap[i]);
 }
 
 void ChorusPage::paint (juce::Graphics& g)
@@ -1388,26 +1327,24 @@ ArpPage::ArpPage (juce::AudioProcessorValueTreeState& state, std::function<int (
         const int x = c.area.getX() + 70, y = c.area.getY() + (cardH - 110) / 2;   // title sits at the left
 
         // Arpeggiator block
-        c.on   = std::unique_ptr<LedButton> (&makeLed (id + "_on",   { x + 0,   y + 30, 34, 42 }));
+        c.on   = &ctl.led (*this, id + "_on",   { x + 0,   y + 30, 34, 42 });
         c.on->cap = kPartCap[i];
-        c.mode = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_mode", { x + 50,  y + 40, 104, 26 }));
-        c.rate = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_rate", { x + 164, y + 40, 78, 26 }));
-        c.oct  = std::unique_ptr<juce::ComboBox> (&makeCombo (id + "_oct",  { x + 252, y + 40, 52, 26 }));
-        c.gate = std::unique_ptr<juce::Slider> (&makeKnob (id + "_gate", { x + 310, y + 20, 64, 64 }));
-        c.sync = std::unique_ptr<LedButton> (&makeLed (id + "_sync", { x + 384, y + 30, 34, 42 }));
+        c.mode = &ctl.combo (*this, id + "_mode", { x + 50,  y + 40, 104, 26 });
+        c.rate = &ctl.combo (*this, id + "_rate", { x + 164, y + 40, 78, 26 });
+        c.oct  = &ctl.combo (*this, id + "_oct",  { x + 252, y + 40, 52, 26 });
+        c.gate = &ctl.knob (*this, id + "_gate", { x + 310, y + 20, 64, 64 });
+        c.sync = &ctl.led (*this, id + "_sync", { x + 384, y + 30, 34, 42 });
 
         // Step gate block, to the right
         const int gx = x + 448;
-        c.sgOn   = std::unique_ptr<LedButton> (&makeLed (sg + "_on", { gx, y + 30, 34, 42 }));
+        c.sgOn   = &ctl.led (*this, sg + "_on", { gx, y + 30, 34, 42 });
         c.sgOn->cap = kPartCap[i];
-        c.grid   = std::make_unique<GateGrid> (apvts, sg);
+        c.grid   = &ctl.add (*this, std::make_unique<GateGrid> (apvts, sg), { gx + 46, y + 32, 270, 44 });
         c.grid->colour = kPartCap[i];
-        c.grid->setBounds (gx + 46, y + 32, 270, 44);
-        addAndMakeVisible (*c.grid);
-        c.sgRate = std::unique_ptr<juce::ComboBox> (&makeCombo (sg + "_rate", { gx + 326, y + 40, 70, 26 }));
-        c.sgSync = std::unique_ptr<LedButton> (&makeLed (sg + "_sync", { gx + 404, y + 30, 34, 42 }));
+        c.sgRate = &ctl.combo (*this, sg + "_rate", { gx + 326, y + 40, 70, 26 });
+        c.sgSync = &ctl.led (*this, sg + "_sync", { gx + 404, y + 30, 34, 42 });
     }
-    tempo = std::unique_ptr<juce::Slider> (&makeKnob ("arp_tempo", { W - 52, 2, 30, 30 }));
+    tempo = &ctl.knob (*this, "arp_tempo", { W - 52, 2, 30, 30 }, "none");
     startTimerHz (30);
 }
 
@@ -1420,45 +1357,6 @@ void ArpPage::timerCallback()
         auto& gr = *cards[(size_t) i].grid;
         if (gr.currentStep != st) { gr.currentStep = st; gr.repaint(); }
     }
-}
-
-juce::Slider& ArpPage::makeKnob (const juce::String& id, juce::Rectangle<int> r)
-{
-    auto* s = new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
-    s->getProperties().set ("white", false);
-    s->getProperties().set ("scale", r.getWidth() >= 60 ? "uni" : "none");
-    s->setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-    s->setPopupDisplayEnabled (true, true, this);
-    s->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) s->setTooltip (prm->getName (64));
-    addAndMakeVisible (*s);
-    sAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, id, *s));
-    return *s;
-}
-
-juce::ComboBox& ArpPage::makeCombo (const juce::String& id, juce::Rectangle<int> r)
-{
-    auto* c = new juce::ComboBox();
-    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
-    {
-        c->addItemList (choice->choices, 1);
-        c->setTooltip (choice->getName (64));
-    }
-    c->setBounds (r);
-    addAndMakeVisible (*c);
-    cAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, id, *c));
-    return *c;
-}
-
-LedButton& ArpPage::makeLed (const juce::String& id, juce::Rectangle<int> r)
-{
-    auto* b = new LedButton (id);
-    b->setClickingTogglesState (true);
-    b->setBounds (r);
-    if (auto* prm = apvts.getParameter (id)) b->setTooltip (prm->getName (64));
-    addAndMakeVisible (*b);
-    bAtt.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, id, *b));
-    return *b;
 }
 
 void ArpPage::paint (juce::Graphics& g)

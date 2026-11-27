@@ -147,6 +147,34 @@ private:
     int index = 0;
 };
 
+// Creates page controls, attaches each to its parameter and owns both. Components are created in call
+// order (so z-order is the call order); attachments are destroyed before the components they watch.
+class Controls
+{
+public:
+    explicit Controls (juce::AudioProcessorValueTreeState& state) : apvts (state) {}
+    juce::Slider& knob (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r, const juce::String& scale = "uni");
+    LedButton& led (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r);
+    ChoiceScreen& screen (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r);
+    juce::ComboBox& combo (juce::Component& owner, const juce::String& id, juce::Rectangle<int> r);
+    // Any other component (custom widgets): placed, shown and owned like the rest.
+    template <typename T> T& add (juce::Component& owner, std::unique_ptr<T> comp, juce::Rectangle<int> r)
+    {
+        comp->setBounds (r);
+        owner.addAndMakeVisible (*comp);
+        auto& ref = *comp;
+        comps.push_back (std::move (comp));
+        return ref;
+    }
+    juce::AudioProcessorValueTreeState& apvts;
+
+private:
+    std::vector<std::unique_ptr<juce::Component>> comps;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
+};
+
 // Assignable LFO panel: shown in place of the joystick (LFO button).
 class LfoPanel : public juce::Component, private juce::Timer
 {
@@ -157,12 +185,9 @@ public:
 
 private:
     void timerCallback() override { repaint (scope); }
-    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r, bool bipolar);
     juce::AudioProcessorValueTreeState& apvts;
     std::function<float()> getPhase, getValue;
-    std::vector<std::unique_ptr<juce::Component>> comps;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
+    Controls ctl { apvts };
     juce::Rectangle<int> scope;
 };
 
@@ -196,9 +221,8 @@ private:
     void addKnob (const char* id, juce::Rectangle<int> r, const juce::String& label);
     void addScreen (const char* id, juce::Rectangle<int> r, const juce::String& label, const juce::String& tip);
     juce::AudioProcessorValueTreeState& apvts;
-    std::unique_ptr<PolyDisplay> quality;
-    std::vector<std::unique_ptr<juce::Component>> comps;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    Controls ctl { apvts };
+    PolyDisplay* quality = nullptr;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> labels;
     juce::Rectangle<int> card;
 };
@@ -275,15 +299,10 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r, const juce::String& label);
-    LedButton& led (const juce::String& id, juce::Rectangle<int> r, const juce::String& label, juce::Colour cap);
     juce::AudioProcessorValueTreeState& apvts;
-    std::vector<std::unique_ptr<juce::Component>> comps;
+    Controls ctl { apvts };
     std::vector<std::pair<juce::Component*, juce::String>> labels;
     juce::Rectangle<int> card;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
 };
 
 // CHORUS page: overlays the control section; opened/closed with the CHORUS button in the top bar.
@@ -294,15 +313,10 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    juce::Slider& knob (const juce::String& id, juce::Rectangle<int> r);
-    LedButton& led (const juce::String& id, juce::Rectangle<int> r);
     juce::AudioProcessorValueTreeState& apvts;
-    std::vector<std::unique_ptr<juce::Component>> comps;
+    Controls ctl { apvts };
     std::vector<std::pair<juce::Component*, juce::String>> labels;
     juce::Rectangle<int> card;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
 };
 
 // STEP GATE grid: 8 steps x L/R lanes, click to toggle, drag to paint; current step highlighted.
@@ -337,26 +351,20 @@ private:
     {
         juce::String name;
         juce::Rectangle<int> area;
-        std::unique_ptr<LedButton> on, sync;
-        std::unique_ptr<juce::ComboBox> mode, rate, oct;
-        std::unique_ptr<juce::Slider> gate;
-        std::unique_ptr<LedButton> sgOn, sgSync;
-        std::unique_ptr<juce::ComboBox> sgRate;
-        std::unique_ptr<GateGrid> grid;
+        LedButton *on = nullptr, *sync = nullptr;          // owned by ctl
+        juce::ComboBox *mode = nullptr, *rate = nullptr, *oct = nullptr;
+        juce::Slider* gate = nullptr;
+        LedButton *sgOn = nullptr, *sgSync = nullptr;
+        juce::ComboBox* sgRate = nullptr;
+        GateGrid* grid = nullptr;
     };
     void timerCallback() override;
     std::function<int (int)> gateStepFn;
 
-    juce::Slider& makeKnob (const juce::String& id, juce::Rectangle<int> r);
-    juce::ComboBox& makeCombo (const juce::String& id, juce::Rectangle<int> r);
-    LedButton& makeLed (const juce::String& id, juce::Rectangle<int> r);
-
     juce::AudioProcessorValueTreeState& apvts;
+    Controls ctl { apvts };
     std::array<Card, 3> cards;
-    std::unique_ptr<juce::Slider> tempo;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> cAtt;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
+    juce::Slider* tempo = nullptr;
 };
 } // namespace tdxui
 
