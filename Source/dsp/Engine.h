@@ -248,6 +248,10 @@ struct Voice
     float fadeGain = 1.0f;       // declick: a stolen voice fades out before taking its new note
     bool swapping = false;
     OnePoleLP balLp1, balLp2;   // strings KBD BALANCE filter (12 dB, key tracked)
+    // AC coupling (~5 Hz) of the synth and brass oscillator mixes, as on the hardware: pulse waves carry a
+    // large DC offset, and without this any fast level change downstream (volume, step gate, FX order,
+    // voice steal) turns that offset into a thump.
+    DcBlocker synDc, brDc;
 
     bool isActive() const { return aenv.isActive() || brGateEnv.isActive() || brEnv.isActive() || stEnv.isActive(); }
 };
@@ -269,6 +273,7 @@ public:
             v.vcf.prepare (sr); v.vcf.compensation = 0.6f;   // mostly flat passband (manual's graph), less boom
             v.brVcf.prepare (sr); v.brEnv.prepare (sr);
             v.fenv.prepare (sr); v.aenv.prepare (sr);
+            v.synDc.setCutoff (5.0f, sr); v.brDc.setCutoff (5.0f, sr);
             v.driftCents = r.bipolar() * 3.0f;
             v.v2Offset = r.bipolar() * 2.0f;
             v.vco1.phase = 0.5 * (r.bipolar() + 1.0); v.vco2.phase = 0.5 * (r.bipolar() + 1.0);
@@ -711,7 +716,7 @@ public:
                     const float ae = v.vcaSlew;
                     const float cutOct = p.cutoff * 10.0f + p.egInt * fe * 10.0f + kbd * ((float) v.pitchNote - 60.0f) / 12.0f;
                     v.vcf.setCutoff (20.0f * std::exp2 (cutOct), p.res);
-                    synSum += v.vcf.process ((osc1 * vcoG1 + osc2 * vcoG2) * 0.35f) * ae * attenGain * vg;
+                    synSum += v.vcf.process (v.synDc.process ((osc1 * vcoG1 + osc2 * vcoG2) * 0.35f)) * ae * attenGain * vg;
                     if (! v.aenv.isActive()) v.vcf.reset();
                 }
 
@@ -733,7 +738,7 @@ public:
                                                   : footageWave (ob, 3 - p.br2Scale, brassPulseWidth (p.br2Wave))) * brG2;
                     }
                     // Normalise the oscillator stack (16' + 8' + OSC 2) so it doesn't overdrive the filter.
-                    b *= brassMixNorm;
+                    b = v.brDc.process (b * brassMixNorm);
                     if (p.brPoly)
                     {
                         // POLY voicing: this note's own EG drives its own filter and amplifier.

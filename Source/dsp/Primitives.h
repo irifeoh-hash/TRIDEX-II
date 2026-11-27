@@ -169,8 +169,9 @@ struct OnePoleLP
 
 struct DcBlocker
 {
-    float x1 = 0.0f, y1 = 0.0f;
-    float process (float x) { const float y = x - x1 + 0.995f * y1; x1 = x; y1 = y; return y; }
+    float x1 = 0.0f, y1 = 0.0f, r = 0.995f;   // r = pole: 0.995 ~ 35 Hz at 44.1 kHz (output stage)
+    float process (float x) { const float y = x - x1 + r * y1; x1 = x; y1 = y; return y; }
+    void setCutoff (float hz, float sr) { r = std::exp (-kTwoPi * hz / sr); }
 };
 
 //==============================================================================
