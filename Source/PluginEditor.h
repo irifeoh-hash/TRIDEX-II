@@ -408,19 +408,18 @@ private:
 
     tdxui::LedButton* writeBtn = nullptr;
     tdxui::LedButton* manualBtn = nullptr;
-    tdxui::LedButton* arpBtn = nullptr;
-    tdxui::LedButton* chorusBtn = nullptr;
     std::unique_ptr<tdxui::ChorusPage> chorusPage;
     std::unique_ptr<tdxui::AboutPage> aboutPage;
     std::unique_ptr<tdxui::TapePage> tapePage;
-    tdxui::LedButton* tapeBtn = nullptr;
     std::unique_ptr<tdxui::FxPage> fxPage;
-    tdxui::LedButton* fxBtn = nullptr;
     std::unique_ptr<tdxui::SettingsPage> settingsPage;
-    tdxui::LedButton* settingsBtn = nullptr;
-    void togglePage (juce::Component* page);
+    // Overlay pages: added with addPage (optionally with a top-bar button at lcd.getRight() + x).
+    void addPage (juce::Component& page, const char* button = nullptr, int x = 0, int labelW = 0, const juce::String& tip = {});
+    void togglePage (juce::Component* page);   // show one overlay page (or hide it if open); closes the others
+    std::vector<juce::Component*> pages;
+    std::vector<std::pair<tdxui::LedButton*, juce::Component*>> pageButtons;
     std::unique_ptr<tdxui::LfoPanel> lfoPanel;
-    tdxui::LedButton* lfoBtn = nullptr;   // show one overlay page (or hide it if open); closes the others
+    tdxui::LedButton* lfoBtn = nullptr;
     std::unique_ptr<tdxui::LogoHotspot> logoHotspot;
     std::unique_ptr<tdxui::ArpPage> arpPage;
     std::unique_ptr<tdxui::SplitOverlay> splitOverlay;

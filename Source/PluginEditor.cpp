@@ -1806,102 +1806,27 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
 
     lcd = { 300, 9, 130, 24 };
 
-    // ---------------- ARP page toggle (Tridex II)
+    // ---------------- Overlay pages and their top-bar buttons (Tridex II)
     arpPage = std::make_unique<tdxui::ArpPage> (proc.apvts, [this] (int sec) { return proc.getGateStep (sec); });
-    arpPage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*arpPage);
-    {
-        auto b = std::make_unique<tdxui::LedButton> ("ARP");
-        b->setBounds (lcd.getRight() + 10, 4, 30, 32);
-        b->setTooltip ("Show / hide the arpeggiator page");
-        b->onClick = [this]
-        {
-            togglePage (arpPage.get());
-        };
-        addAndMakeVisible (*b);
-        arpBtn = b.get();
-        owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 44, 13, 34, 14 }, "ARP", 10.0f, true, juce::Justification::centredLeft);
-    }
+    addPage (*arpPage, "ARP", 10, 34, "Show / hide the arpeggiator page");
 
-    // ---------------- ABOUT page: click the I Rife logo (Tridex II)
+    // ABOUT page: click the Irife logo
     aboutPage = std::make_unique<tdxui::AboutPage> ([this] { aboutPage->setVisible (false); });
-    aboutPage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*aboutPage);
+    addPage (*aboutPage);
     logoHotspot = std::make_unique<tdxui::LogoHotspot>();
     logoHotspot->setBounds (188, 2, 100, 34);
     logoHotspot->setTooltip ("About Tridex II");
-    logoHotspot->onClick = [this]
-    {
-        togglePage (aboutPage.get());
-    };
+    logoHotspot->onClick = [this] { togglePage (aboutPage.get()); };
     addAndMakeVisible (*logoHotspot);
 
-    // ---------------- CHORUS page toggle (Tridex II)
     chorusPage = std::make_unique<tdxui::ChorusPage> (proc.apvts);
-    chorusPage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*chorusPage);
-    {
-        auto b = std::make_unique<tdxui::LedButton> ("CHORUS");
-        b->setBounds (lcd.getRight() + 80, 4, 30, 32);
-        b->setTooltip ("Show / hide the chorus page");
-        b->onClick = [this]
-        {
-            togglePage (chorusPage.get());
-        };
-        addAndMakeVisible (*b);
-        chorusBtn = b.get();
-        owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 114, 13, 56, 14 }, "CHORUS", 10.0f, true, juce::Justification::centredLeft);
-    }
-
-    // ---------------- TAPE page toggle (Tridex II)
+    addPage (*chorusPage, "CHORUS", 80, 56, "Show / hide the chorus page");
     tapePage = std::make_unique<tdxui::TapePage> (proc.apvts);
-    tapePage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*tapePage);
-    {
-        auto b = std::make_unique<tdxui::LedButton> ("TAPE");
-        b->setBounds (lcd.getRight() + 176, 4, 30, 32);
-        b->setTooltip ("Show / hide the tape page");
-        b->onClick = [this]
-        {
-            togglePage (tapePage.get());
-        };
-        addAndMakeVisible (*b);
-        tapeBtn = b.get();
-        owned.push_back (std::move (b));
-    }
-
-    // ---------------- FX ROUTING page toggle (Tridex II)
+    addPage (*tapePage, "TAPE", 176, 40, "Show / hide the tape page");
     fxPage = std::make_unique<tdxui::FxPage> (proc.apvts);
-    fxPage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*fxPage);
-    {
-        auto b = std::make_unique<tdxui::LedButton> ("FX");
-        b->setBounds (lcd.getRight() + 254, 4, 30, 32);
-        b->setTooltip ("Show / hide the FX routing page (effect order per part)");
-        b->onClick = [this] { togglePage (fxPage.get()); };
-        addAndMakeVisible (*b);
-        fxBtn = b.get();
-        owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 288, 13, 24, 14 }, "FX", 10.0f, true, juce::Justification::centredLeft);
-    }
-
-    // ---------------- SETTINGS page toggle (Tridex II)
+    addPage (*fxPage, "FX", 254, 24, "Show / hide the FX routing page (effect order per part)");
     settingsPage = std::make_unique<tdxui::SettingsPage> (proc.apvts);
-    settingsPage->setBounds (24, 40, kW - 48, kLowerY - 40);
-    addChildComponent (*settingsPage);
-    {
-        auto b = std::make_unique<tdxui::LedButton> ("SETTINGS");
-        b->setBounds (lcd.getRight() + 316, 4, 30, 32);
-        b->setTooltip ("Show / hide the settings page");
-        b->onClick = [this] { togglePage (settingsPage.get()); };
-        addAndMakeVisible (*b);
-        settingsBtn = b.get();
-        owned.push_back (std::move (b));
-        text ({ (float) lcd.getRight() + 350, 13, 64, 14 }, "SETTINGS", 10.0f, true, juce::Justification::centredLeft);
-        text ({ (float) lcd.getRight() + 210, 13, 40, 14 }, "TAPE", 10.0f, true, juce::Justification::centredLeft);
-    }
+    addPage (*settingsPage, "SETTINGS", 316, 64, "Show / hide the settings page");
 
     // ---------------- Keyboard (61 keys, C-C)
     keyboard.setAvailableRange (36, 96);
@@ -1952,13 +1877,28 @@ void TridexPanel::programPressed (int number)
     proc.recallProgram (bank * 8 + number);
 }
 
+void TridexPanel::addPage (juce::Component& page, const char* button, int x, int labelW, const juce::String& tip)
+{
+    page.setBounds (24, 40, kW - 48, kLowerY - 40);
+    addChildComponent (page);
+    pages.push_back (&page);
+    if (button == nullptr) return;
+
+    auto b = std::make_unique<tdxui::LedButton> (button);
+    b->setBounds (lcd.getRight() + x, 4, 30, 32);
+    b->setTooltip (tip);
+    b->onClick = [this, &page] { togglePage (&page); };
+    addAndMakeVisible (*b);
+    pageButtons.push_back ({ b.get(), &page });
+    owned.push_back (std::move (b));
+    text ({ (float) lcd.getRight() + x + 34, 13, (float) labelW, 14 }, button, 10.0f, true, juce::Justification::centredLeft);
+}
+
 void TridexPanel::togglePage (juce::Component* page)
 {
     if (page == nullptr) return;
     const bool show = ! page->isVisible();
-    for (juce::Component* c : { (juce::Component*) arpPage.get(), (juce::Component*) chorusPage.get(), (juce::Component*) tapePage.get(),
-                                (juce::Component*) aboutPage.get(), (juce::Component*) settingsPage.get(), (juce::Component*) fxPage.get() })
-        if (c != nullptr) c->setVisible (false);
+    for (auto* p : pages) p->setVisible (false);
     page->setVisible (show);
     if (show) page->toFront (false);
 }
@@ -1977,9 +1917,8 @@ void TridexPanel::timerCallback()
         progBtns[(size_t) i]->lit = ! manual && ! writeArmed && cur % 8 == i;
     writeBtn->repaint(); manualBtn->repaint();
     if (splitOverlay) splitOverlay->refreshIfChanged();
-    if (arpBtn->lit != arpPage->isVisible()) { arpBtn->lit = arpPage->isVisible(); arpBtn->repaint(); }
-    if (chorusBtn->lit != chorusPage->isVisible()) { chorusBtn->lit = chorusPage->isVisible(); chorusBtn->repaint(); }
-    if (tapeBtn && tapeBtn->lit != tapePage->isVisible()) { tapeBtn->lit = tapePage->isVisible(); tapeBtn->repaint(); }
+    for (auto& [btn, page] : pageButtons)   // a page button is lit while its page is open
+        if (btn->lit != page->isVisible()) { btn->lit = page->isVisible(); btn->repaint(); }
     if (lfoBtn != nullptr)
     {
         // Lit while the LFO panel is open; otherwise it flashes with the LFO when a destination is in use.
@@ -1988,8 +1927,6 @@ void TridexPanel::timerCallback()
         const bool lit = lfoPanel->isVisible() || (used && proc.getLfoValue() > 0.0f);
         if (lfoBtn->lit != lit) { lfoBtn->lit = lit; lfoBtn->repaint(); }
     }
-    if (fxBtn && fxBtn->lit != fxPage->isVisible()) { fxBtn->lit = fxPage->isVisible(); fxBtn->repaint(); }
-    if (settingsBtn && settingsBtn->lit != settingsPage->isVisible()) { settingsBtn->lit = settingsPage->isVisible(); settingsBtn->repaint(); }
     for (auto* b : bankBtns) b->repaint();
     for (auto* b : progBtns) b->repaint();
 
