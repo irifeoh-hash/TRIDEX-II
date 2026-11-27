@@ -112,23 +112,9 @@ private:
     bool dragging = false;
 };
 
-// POLYPHONY: small red LED display, 8 or 16 voices; click (or an arrow, or scroll) to switch.
-class PolyDisplay : public juce::Component, public juce::SettableTooltipClient
-{
-public:
-    PolyDisplay (juce::RangedAudioParameter& p);
-    void paint (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-    juce::String text0 { " 8 VOICE" }, text1 { "16 VOICE" };   // what the display shows for each state
-
-private:
-    juce::ParameterAttachment attachment;
-    int index = 0;   // 0 = 8 voices, 1 = 16 voices
-};
-
 // Red LED screen for any choice parameter: arrows step, click the middle for a list.
 // For lists with group prefixes ("SYN CUTOFF", "BR CUTOFF" ...) the pop-up is sectioned by prefix.
+// Short two-state switches (POLYPHONY, QUALITY) use cycleOnClick and their own display labels.
 class ChoiceScreen : public juce::Component, public juce::SettableTooltipClient
 {
 public:
@@ -138,6 +124,8 @@ public:
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool sectioned = false;
     float fontSize = 11.0f;
+    bool cycleOnClick = false;      // click anywhere steps to the next value; scrolling stops at the ends
+    juce::StringArray labels;       // optional: shown instead of the parameter's choice names (drawn as given)
 
 private:
     void step (int d);
@@ -222,7 +210,7 @@ private:
     void addScreen (const char* id, juce::Rectangle<int> r, const juce::String& label, const juce::String& tip);
     juce::AudioProcessorValueTreeState& apvts;
     Controls ctl { apvts };
-    PolyDisplay* quality = nullptr;
+    ChoiceScreen* quality = nullptr;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> labels;
     juce::Rectangle<int> card;
 };

@@ -364,36 +364,6 @@ void SplitPointControl::paint (juce::Graphics& g)
     g.drawText (juce::MidiMessage::getMidiNoteName (note, true, true, 3), b, juce::Justification::centred);
 }
 
-PolyDisplay::PolyDisplay (juce::RangedAudioParameter& p)
-    : attachment (p, [this] (float v) { index = juce::roundToInt (v); repaint(); })
-{
-    attachment.sendInitialUpdate();
-}
-
-void PolyDisplay::paint (juce::Graphics& g)
-{
-    const auto b = getLocalBounds().toFloat();
-    g.setColour (juce::Colour (0xff1d0705));
-    g.fillRoundedRectangle (b, 2.5f);
-    g.setColour (kLedOn.withAlpha (0.6f));
-    const float cy = b.getCentreY();
-    juce::Path l, r;
-    l.addTriangle (b.getX() + 4, cy, b.getX() + 9, cy - 4, b.getX() + 9, cy + 4);
-    r.addTriangle (b.getRight() - 4, cy, b.getRight() - 9, cy - 4, b.getRight() - 9, cy + 4);
-    g.fillPath (l); g.fillPath (r);
-    g.setColour (kLedOn);
-    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::bold));
-    g.drawText (index == 1 ? text1 : text0, b, juce::Justification::centred);
-}
-
-void PolyDisplay::mouseDown (const juce::MouseEvent&) { attachment.setValueAsCompleteGesture (index == 1 ? 0.0f : 1.0f); }
-
-void PolyDisplay::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
-{
-    if (w.deltaY > 0 && index != 1) attachment.setValueAsCompleteGesture (1.0f);
-    if (w.deltaY < 0 && index != 0) attachment.setValueAsCompleteGesture (0.0f);
-}
-
 void SplitPointControl::setNote (int n)
 {
     n = juce::jlimit (24, 108, n);
@@ -712,7 +682,8 @@ void ChoiceScreen::paint (juce::Graphics& g)
     g.fillPath (l); g.fillPath (r);
     g.setColour (kLedOn);
     g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), fontSize, juce::Font::bold));
-    g.drawFittedText (names[index].toUpperCase(), getLocalBounds().reduced (12, 0), juce::Justification::centred, 1, 0.7f);
+    if (labels.size() > index) g.drawText (labels[index], b, juce::Justification::centred);
+    else g.drawFittedText (names[index].toUpperCase(), getLocalBounds().reduced (12, 0), juce::Justification::centred, 1, 0.7f);
 }
 
 void ChoiceScreen::step (int d)
@@ -723,6 +694,7 @@ void ChoiceScreen::step (int d)
 
 void ChoiceScreen::mouseDown (const juce::MouseEvent& e)
 {
+    if (cycleOnClick) { step (+1); return; }
     if (e.x < 14) { step (-1); return; }
     if (e.x > getWidth() - 14) { step (+1); return; }
     juce::PopupMenu m;
@@ -755,6 +727,12 @@ void ChoiceScreen::mouseDown (const juce::MouseEvent& e)
 
 void ChoiceScreen::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
 {
+    if (cycleOnClick)
+    {
+        const int to = juce::jlimit (0, juce::jmax (0, names.size() - 1), index + (w.deltaY > 0 ? 1 : (w.deltaY < 0 ? -1 : 0)));
+        if (to != index) attachment.setValueAsCompleteGesture ((float) to);
+        return;
+    }
     if (w.deltaY > 0) step (-1); else if (w.deltaY < 0) step (+1);
 }
 
@@ -1053,9 +1031,8 @@ SettingsPage::SettingsPage (juce::AudioProcessorValueTreeState& state) : apvts (
     // TUNING
     addKnob ("drift", { x0 + 520, y - 16, 56, 56 }, "ANALOG DRIFT");
     // SOUND / CPU
-    quality = &ctl.add (*this, std::make_unique<PolyDisplay> (*state.getParameter ("quality")), { x0 + 650, y, 110, 24 });
-    quality->text0 = "NORMAL";
-    quality->text1 = "ECO";
+    quality = &ctl.screen (*this, "quality", { x0 + 650, y, 110, 24 });
+    quality->cycleOnClick = true; quality->fontSize = 12.0f; quality->labels = { "NORMAL", "ECO" };
     quality->setTooltip ("Filter quality: NORMAL = 2x oversampled filters, ECO = lower CPU. Click to switch.");
     labels.push_back ({ quality->getBounds(), "QUALITY" });
     // OUTPUTS
@@ -1521,7 +1498,8 @@ TridexPanel::TridexPanel (TridexProcessor& p) : proc (p)
         }
         // Tridex II: polyphony, 8 (classic) or 16 voices shared by all parts
         {
-            auto pd = std::make_unique<tdxui::PolyDisplay> (*proc.apvts.getParameter ("polyphony"));
+            auto pd = std::make_unique<tdxui::ChoiceScreen> (*proc.apvts.getParameter ("polyphony"));
+            pd->cycleOnClick = true; pd->fontSize = 12.0f; pd->labels = { " 8 VOICE", "16 VOICE" };
             pd->setBounds (x + 14, kSwY + 14, 2 * kCol - 28, 24);
             pd->setTooltip ("Polyphony: 8 voices (classic Trident) or 16 voices, shared by all three parts. Click to switch.");
             addAndMakeVisible (*pd);
