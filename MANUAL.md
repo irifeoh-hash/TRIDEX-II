@@ -6,6 +6,7 @@ TRIDEX II is a performing-keyboard instrument plugin (VST3 on Windows and macOS,
 inspired by the Korg Trident Mk II. Like the original, it has three instrument sections:
 **SYNTHESIZER**, **BRASS** and **STRINGS**. They share 8 voices (or 16) and can be split or layered across the keyboard.
 On top of the original, TRIDEX II adds:
+
 - per-part arpeggiators and step gates,
 - chorus/ensemble and tape/VHS effects, with the effect order adjustable per part,
 - an assignable LFO,
@@ -14,7 +15,15 @@ On top of the original, TRIDEX II adds:
 - a phase-locked DIVIDE DOWN mode for the strings,
 - separate outputs for each part.
 
-![TRIDEX II](docs/screenshot.png)
+<p align="center"><img src="docs/manual/panel.png" width="900" alt="panel.png"></p>
+
+> **Quick start**
+>
+> 1. Install the plugin (section 1) and load **Tridex II** as an instrument in your DAW.
+> 2. Play: the **SYNTHESIZER** part is on by default. Turn on **BRASS** and **STRINGS** with their blue **OUTPUT** switches.
+> 3. Choose where each part plays with **KBD SPLIT** (L, L+H or H), and give each part its own split point.
+> 4. Try the factory sounds: press **A**, then **1–8** in the programmer.
+> 5. Open the pages in the top bar, **ARP · CHORUS · TAPE · FX · SETTINGS**, and the **LFO** next to the joystick.
 
 ---
 
@@ -43,6 +52,20 @@ On top of the original, TRIDEX II adds:
 21. [MIDI](#21-midi)
 22. [Tips](#22-tips)
 
+### The panel at a glance
+
+<p align="center"><img src="docs/manual/panel-map.png" width="900" alt="Numbers match the manual sections below."></p>
+<p align="center"><sub><i>Numbers match the manual sections below.</i></sub></p>
+
+| # | Area | # | Area |
+|---|---|---|---|
+| 3 | [Top bar](#3-top-bar) | 9 | [STRINGS](#9-strings) |
+| 4 | [KEY ASSIGN](#4-key-assign) | 10 | [VOLUME](#10-volume) |
+| 5 | [FLANGER](#5-flanger) | 11 | [DELAY VIBRATO, JOYSTICK, TRANSPOSE](#11-delay-vibrato-joystick-and-transpose) |
+| 6 | [SYNTHESIZER](#6-synthesizer) | 12 | [LFO](#12-lfo) button |
+| 7 | [Programmer](#7-programmer) | 13 | [Keyboard and split strip](#13-keyboard-and-split-strip) |
+| 8 | [BRASS](#8-brass) | | |
+
 ---
 
 ## 1. Installing
@@ -66,6 +89,8 @@ To resize the window, drag its bottom-right corner. The panel keeps its proporti
 
 The colours mean the same thing everywhere on the panel and on the pop-up pages:
 
+<p align="center"><img src="docs/manual/colour-key.png" width="760" alt="colour-key.png"></p>
+
 | Colour | Meaning |
 |---|---|
 | **Green** | SYNTHESIZER |
@@ -85,6 +110,8 @@ A red LED on a switch means it is on. The red LED **screens** (POLYPHONY, VOICIN
 
 ## 3. Top bar
 
+<p align="center"><img src="docs/manual/topbar.png" width="900" alt="topbar.png"></p>
+
 | Control | What it does |
 |---|---|
 | **Irife logo** | Click it to open the About page, and click it again to close. |
@@ -97,9 +124,16 @@ A red LED on a switch means it is on. The red LED **screens** (POLYPHONY, VOICIN
 
 Only one pop-up page (ARP, CHORUS, TAPE, FX, SETTINGS or About) is open at a time. The button for the open page is lit.
 
+<p align="center"><img src="docs/manual/page-about.png" width="640" alt="The About page: click the Irife logo."></p>
+<p align="center"><sub><i>The About page: click the Irife logo.</i></sub></p>
+
+
 ---
 
 ## 4. KEY ASSIGN
+
+<p align="center"><img src="docs/manual/key-assign.png" width="320" alt="KEY ASSIGN (left) and FLANGER (right)."></p>
+<p align="center"><sub><i>KEY ASSIGN (left) and FLANGER (right).</i></sub></p>
 
 | Control | What it does |
 |---|---|
@@ -140,6 +174,8 @@ A stereo flanger with a selector for each part.
 ---
 
 ## 6. SYNTHESIZER
+
+<p align="center"><img src="docs/manual/synth.png" width="900" alt="synth.png"></p>
 
 A polyphonic synth (8 or 16 voices, see POLYPHONY in section 4) with two divider-style VCOs, a 4-pole resonant filter and two ADSRs per voice.
 The knobs in this section are **programmable**: they are stored by the Programmer (see section 7).
@@ -197,6 +233,8 @@ the filter, and the VCA EG shapes the volume.
 
 ## 7. Programmer
 
+<p align="center"><img src="docs/manual/programmer.png" width="520" alt="programmer.png"></p>
+
 There are 32 program slots: banks **A–D** × numbers **1–8**. As on the original, a program stores only the
 SYNTHESIZER section's sound settings: VCO 1/2, VCO MIX, VCF, both EGs, ATTENUATOR, AUTO DAMP, GLIDE, PORTA/GLISS, MONO and RETRIG/LEGATO.
 
@@ -213,6 +251,8 @@ The LFO's **SYN PATCH** destination can sweep and morph through the programs of 
 ---
 
 ## 8. BRASS
+
+<p align="center"><img src="docs/manual/brass.png" width="760" alt="brass.png"></p>
 
 Brass is modelled on the original's brass board. Every key has its own oscillators, and by default the
 whole section shares one filter and one envelope (paraphonic), which gives the classic brass "swell".
@@ -251,6 +291,9 @@ whole section shares one filter and one envelope (paraphonic), which gives the c
 
 ## 9. STRINGS
 
+<p align="center"><img src="docs/manual/strings.png" width="560" alt="STRINGS, with the VOLUME section on the right."></p>
+<p align="center"><sub><i>STRINGS, with the VOLUME section on the right.</i></sub></p>
+
 A string machine with ensemble, bowing, vibrato and EQ. By default each string note uses its voice's own oscillator (like the original, where octaves can beat gently against each other). **DIVIDE DOWN** switches to a phase-locked, classic string-machine oscillator bank.
 
 | Control | What it does |
@@ -276,6 +319,8 @@ A string machine with ensemble, bowing, vibrato and EQ. By default each string n
 
 ## 11. DELAY VIBRATO, JOYSTICK and TRANSPOSE
 
+<p align="center"><img src="docs/manual/joystick.png" width="340" alt="joystick.png"></p>
+
 | Control | What it does |
 |---|---|
 | **DELAY VIBRATO** (button) + **INTENSITY** | Vibrato that fades in a moment after each note, for expressive leads. |
@@ -287,6 +332,14 @@ A string machine with ensemble, bowing, vibrato and EQ. By default each string n
 ---
 
 ## 12. LFO
+
+<table align="center"><tr>
+<td><img src="docs/manual/lfo.png" width="420" alt="LFO panel"></td>
+<td><img src="docs/manual/lfo-menu.png" width="150" alt="LFO destination list"></td>
+</tr><tr>
+<td align="center"><sub><i>The LFO panel, in place of the joystick.</i></sub></td>
+<td align="center"><sub><i>Destination list.</i></sub></td>
+</tr></table>
 
 An assignable LFO with two destinations. Press the **LFO** button (next to DELAY VIBRATO) to swap the joystick area for the LFO panel, and press it again for the joystick. The LFO keeps running either way. While the panel is closed, the button's LED flashes with the LFO whenever a destination is in use.
 
@@ -320,6 +373,8 @@ The LFO moves the sound around your knob setting; the knob itself doesn't move. 
 
 ## 13. Keyboard and split strip
 
+<p align="center"><img src="docs/manual/keyboard.png" width="760" alt="keyboard.png"></p>
+
 The on-screen keyboard (C1–C6) plays the instrument with the mouse.
 
 The **strip above the keys** shows where each part plays:
@@ -330,6 +385,8 @@ The **strip above the keys** shows where each part plays:
 ---
 
 ## 14. ARP page: arpeggiators and step gates
+
+<p align="center"><img src="docs/manual/page-arp.png" width="900" alt="page-arp.png"></p>
 
 Click **ARP** in the top bar. Each part has its own row.
 
@@ -358,6 +415,8 @@ Arp and step gate can be used together or separately.
 
 ## 15. CHORUS page
 
+<p align="center"><img src="docs/manual/page-chorus.png" width="900" alt="page-chorus.png"></p>
+
 Click **CHORUS** in the top bar. This is a stereo chorus and ensemble in the spirit of classic
 dimension-style units.
 
@@ -377,6 +436,8 @@ In the default order the chorus runs before the flanger; you can change that per
 ---
 
 ## 16. TAPE page
+
+<p align="center"><img src="docs/manual/page-tape.png" width="900" alt="page-tape.png"></p>
 
 Click **TAPE** in the top bar. This is a tape and VHS processor, from subtle tape colour to very wobbly worn VHS.
 By default it sits at the end of each part's effect chain; you can move it on the FX ROUTING page.
@@ -404,6 +465,8 @@ sways by about a semitone.
 
 ## 17. FX ROUTING page
 
+<p align="center"><img src="docs/manual/page-fx.png" width="900" alt="page-fx.png"></p>
+
 Click **FX** in the top bar. Each part (SYNTHE, BRASS, STRINGS) has a lane showing its effect chain: **GATE → CHORUS → FLANGER → TAPE** (the classic order).
 
 - **Moving blocks:** click the **◀ ▶** arrows on a block to move it left or right.
@@ -421,6 +484,8 @@ The order matters most with TAPE and GATE:
 
 ## 18. SETTINGS page
 
+<p align="center"><img src="docs/manual/page-settings.png" width="900" alt="page-settings.png"></p>
+
 Click **SETTINGS** in the top bar. These are set-and-forget options. They are saved with your project and can be automated.
 
 | Setting | What it does |
@@ -437,13 +502,8 @@ Click **SETTINGS** in the top bar. These are set-and-forget options. They are sa
 
 ## 19. Signal flow
 
-```
-                 ┌─ SYNTHESIZER ─ GATE ─ CHORUS ─ FLANGER ─ TAPE ─┐
-keys ─ arps ─────┼─ BRASS ─────── GATE ─ CHORUS ─ FLANGER ─ TAPE ─┼─ TOTAL VOLUME ─ outputs
-                 └─ STRINGS ───── GATE ─ CHORUS ─ FLANGER ─ TAPE ─┘
-        LFO ─ ─ ─ ─ (modulates any 2 destinations, see section 12)
-  (each effect only processes the parts selected on it; the order of the four blocks is set per part on the FX ROUTING page)
-```
+<p align="center"><img src="docs/manual/signal-flow.png" width="900" alt="signal-flow.png"></p>
+
 
 The three parts share the same voice pool (8 or 16 voices, see section 4), as on the original. With OUTPUTS set to SEPARATE, each part goes to its own output instead of Main (see section 20).
 
