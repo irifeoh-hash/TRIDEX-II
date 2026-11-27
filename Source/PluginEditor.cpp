@@ -42,6 +42,31 @@ constexpr int kLowerY = kBarY + 24 + kTier;   // joystick / keyboard area
 constexpr int kRail = 10;                // wooden rail under the keys
 constexpr int kKeysX = 312;              // keyboard starts here
 constexpr int kStrip = 26;               // split-indicator strip above the keys
+
+// Overlay pages: background, border, title and the grey hint line next to it.
+void paintPageFrame (juce::Graphics& g, const juce::Component& page, const juce::String& title = {},
+                     const juce::String& hint = {}, int hintX = 0, int hintW = 0)
+{
+    g.fillAll (kPanel);
+    g.setColour (kInk.withAlpha (0.25f));
+    g.drawRect (page.getLocalBounds().toFloat(), 1.0f);
+    if (title.isEmpty()) return;
+    g.setColour (kInk);
+    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    g.drawText (title, 18, 8, 300, 18, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (9.0f));
+    g.setColour (kInk.withAlpha (0.55f));
+    g.drawText (hint, hintX, 8, hintW, 18, juce::Justification::centredLeft);
+}
+
+// The rounded, slightly darker card that groups a page's controls.
+void paintCard (juce::Graphics& g, juce::Rectangle<float> r, float outlineAlpha = 0.2f)
+{
+    g.setColour (kPanel2);
+    g.fillRoundedRectangle (r, 6.0f);
+    g.setColour (kInk.withAlpha (outlineAlpha));
+    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+}
 } // namespace
 
 namespace tdxui
@@ -617,9 +642,7 @@ AboutPage::AboutPage (std::function<void()> onClose) : closeFn (std::move (onClo
 
 void AboutPage::paint (juce::Graphics& g)
 {
-    g.fillAll (kPanel);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    paintPageFrame (g, *this);
 
     // Logo, large, on the left
     static const juce::Image logo = juce::ImageCache::getFromMemory (BinaryData::irife_logo_png, BinaryData::irife_logo_pngSize);
@@ -954,26 +977,13 @@ void FxPage::mouseDown (const juce::MouseEvent& e)
 
 void FxPage::paint (juce::Graphics& g)
 {
-    g.fillAll (kPanel);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-    g.drawText ("FX ROUTING", 18, 8, 300, 18, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("EACH PART'S EFFECT ORDER  /  USE THE ARROWS ON A BLOCK TO MOVE IT  /  PRESS FX AGAIN TO CLOSE",
-                130, 8, 800, 18, juce::Justification::centredLeft);
+    paintPageFrame (g, *this, "FX ROUTING", "EACH PART'S EFFECT ORDER  /  USE THE ARROWS ON A BLOCK TO MOVE IT  /  PRESS FX AGAIN TO CLOSE", 130, 800);
 
     for (int lane = 0; lane < 3; ++lane)
     {
         const auto col = kPartCol[lane];
         const float cy = blockRect (lane, 0).getCentreY();
-        const auto card = juce::Rectangle<float> (18.0f, cy - 48.0f, (float) getWidth() - 36.0f, 96.0f);
-        g.setColour (kPanel2);
-        g.fillRoundedRectangle (card, 6.0f);
-        g.setColour (kInk.withAlpha (0.15f));
-        g.drawRoundedRectangle (card, 6.0f, 1.0f);
+        paintCard (g, { 18.0f, cy - 48.0f, (float) getWidth() - 36.0f, 96.0f }, 0.15f);
 
         g.setColour (col);
         g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
@@ -1067,21 +1077,8 @@ void SettingsPage::addScreen (const char* id, juce::Rectangle<int> r, const juce
 
 void SettingsPage::paint (juce::Graphics& g)
 {
-    g.fillAll (kPanel);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-    g.drawText ("SETTINGS", 18, 8, 300, 18, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("SAVED WITH YOUR PROJECT  /  PRESS SETTINGS AGAIN TO CLOSE", 110, 8, 600, 18, juce::Justification::centredLeft);
-
-    const auto r = card.toFloat();
-    g.setColour (kPanel2);
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (kInk.withAlpha (0.2f));
-    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    paintPageFrame (g, *this, "SETTINGS", "SAVED WITH YOUR PROJECT  /  PRESS SETTINGS AGAIN TO CLOSE", 110, 600);
+    paintCard (g, card.toFloat());
 
     // group headers and dividers
     const int x0 = card.getX();
@@ -1158,22 +1155,9 @@ TapePage::TapePage (juce::AudioProcessorValueTreeState& state) : apvts (state)
 
 void TapePage::paint (juce::Graphics& g)
 {
-    g.fillAll (kPanel);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-    g.drawText ("TAPE", 18, 8, 300, 18, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("WOW / FLUTTER / SATURATION AT THE END OF EACH PART'S CHAIN  /  PRESS TAPE AGAIN TO CLOSE",
-                80, 8, 760, 18, juce::Justification::centredLeft);
-
+    paintPageFrame (g, *this, "TAPE", "WOW / FLUTTER / SATURATION AT THE END OF EACH PART'S CHAIN  /  PRESS TAPE AGAIN TO CLOSE", 80, 760);
     const auto r = card.toFloat();
-    g.setColour (kPanel2);
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (kInk.withAlpha (0.2f));
-    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    paintCard (g, r);
     g.setColour (kInk.withAlpha (0.12f));
     g.drawVerticalLine (card.getX() + 240, r.getY() + 20, r.getY() + 140);
     g.drawHorizontalLine (card.getY() + 160, r.getX() + 20, r.getRight() - 20);
@@ -1273,22 +1257,10 @@ ChorusPage::ChorusPage (juce::AudioProcessorValueTreeState& state) : apvts (stat
 
 void ChorusPage::paint (juce::Graphics& g)
 {
-    g.fillAll (kPanel);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-    g.drawText ("CHORUS / ENSEMBLE", 18, 8, 300, 18, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("PICK THE PARTS IT APPLIES TO, LIKE THE FLANGER  /  RUNS BEFORE THE FLANGER  /  PRESS CHORUS AGAIN TO CLOSE",
-                190, 8, 760, 18, juce::Justification::centredLeft);
-
+    paintPageFrame (g, *this, "CHORUS / ENSEMBLE",
+                    "PICK THE PARTS IT APPLIES TO, LIKE THE FLANGER  /  RUNS BEFORE THE FLANGER  /  PRESS CHORUS AGAIN TO CLOSE", 190, 760);
     const auto r = card.toFloat();
-    g.setColour (kPanel2);
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (kInk.withAlpha (0.2f));
-    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    paintCard (g, r);
     g.setColour (kInk.withAlpha (0.12f));
     for (const int x : { 220, 396, 820 })
         g.drawVerticalLine (card.getX() + x, r.getY() + 20, r.getBottom() - 20);
@@ -1361,26 +1333,12 @@ void ArpPage::timerCallback()
 
 void ArpPage::paint (juce::Graphics& g)
 {
-    const auto b = getLocalBounds().toFloat();
-    g.setColour (kPanel);
-    g.fillRect (b);
-    g.setColour (kInk.withAlpha (0.25f));
-    g.drawRect (b, 1.0f);
-
-    g.setColour (kInk);
-    g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-    g.drawText ("ARPEGGIATOR", 18, 8, 300, 18, juce::Justification::centredLeft);
-    g.setFont (juce::FontOptions (9.0f));
-    g.setColour (kInk.withAlpha (0.55f));
-    g.drawText ("ONE ARP + STEP GATE PER PART  /  SYNC LOCKS TO THE HOST CLOCK  /  PRESS ARP AGAIN TO CLOSE", 150, 8, 700, 18, juce::Justification::centredLeft);
+    paintPageFrame (g, *this, "ARPEGGIATOR", "ONE ARP + STEP GATE PER PART  /  SYNC LOCKS TO THE HOST CLOCK  /  PRESS ARP AGAIN TO CLOSE", 150, 700);
 
     for (const auto& c : cards)
     {
         const auto r = c.area.toFloat();
-        g.setColour (kPanel2);
-        g.fillRoundedRectangle (r, 6.0f);
-        g.setColour (kInk.withAlpha (0.2f));
-        g.drawRoundedRectangle (r, 6.0f, 1.0f);
+        paintCard (g, r);
 
         g.setColour (kInk);
         g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
